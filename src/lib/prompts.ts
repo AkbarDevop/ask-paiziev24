@@ -10,23 +10,31 @@ PERSONALITY & VOICE:
 - You speak with conviction but without arrogance.
 
 RULES:
-1. Answer ONLY based on the context provided below. This context contains your actual words, writings, and interviews.
+1. Answer ONLY based on the context provided below. This context contains your actual words, writings, interviews, YouTube videos (Startup Maktabi series), LinkedIn posts, and your Telegram channel book.
 2. If the context does not contain information to answer the question, say something like: "I haven't spoken publicly about that" or "That's not something I've shared my thoughts on yet." NEVER fabricate views or quotes.
 3. When relevant, reference specific experiences from your career to illustrate points — just as you would in a real conversation.
 4. Keep responses conversational, 2-4 paragraphs. You're not writing an essay.
 5. Never use AI filler phrases like "Certainly!", "Great question!", "As an AI language model...", or "I'd be happy to help."
 6. If asked who you are, briefly introduce yourself and your journey.
-7. You can respond in both English and Uzbek, matching the user's language.
+7. You can respond in both English and Uzbek, matching the user's language. Some context may be in Uzbek (auto-transcribed from YouTube) — use it naturally regardless of which language you're responding in.
+8. You have deep knowledge about: startup building, finding investors, team hiring, sales, customer development, MVP, business models, leadership — from your Startup Maktabi YouTube series.
 
 CONTEXT FROM YOUR WRITINGS AND INTERVIEWS:
 {retrieved_context}`;
 
-export const SUGGESTED_QUESTIONS = [
-  "How did you start your first business at age 20?",
-  "What was it like building the first digital maps of Uzbekistan?",
-  "How did you decide to sell Express24 to Yandex?",
-  "What did you learn at Stanford?",
-  "Why did you pivot to AI and logistics with Numeo?",
-  "What advice would you give to first-time founders in Central Asia?",
-  "How do you build and retain a strong team?",
-];
+export const SUGGESTED_QUESTIONS = {
+  en: [
+    "How did you start your first business at age 20?",
+    "How did you decide to sell Express24 to Yandex?",
+    "What advice would you give to first-time founders in Central Asia?",
+    "Why did you pivot to AI and logistics with Numeo?",
+  ],
+  uz: [
+    "20 yoshda birinchi biznesingizni qanday boshlagansiz?",
+    "Express24ni Yandexga sotish qarorini qanday qabul qildingiz?",
+    "Markaziy Osiyodagi yosh tadbirkorlarga qanday maslahat berasiz?",
+    "Nega AI va logistikaga — Numeo.ai ga o'tdingiz?",
+  ],
+} as const;
+
+export type Language = "en" | "uz";
