@@ -13,7 +13,20 @@ export function SuggestedQuestions({ onSelect }: SuggestedQuestionsProps) {
         <button
           key={question}
           onClick={() => onSelect(question)}
-          className="group rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-left text-[13px] leading-snug text-[var(--muted)] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--muted)] hover:text-[var(--foreground)] hover:shadow-md"
+          className="group rounded-xl px-4 py-3 text-left text-[13px] leading-snug transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+          style={{
+            background: "var(--suggestion-bg)",
+            color: "var(--muted)",
+            border: "1px solid var(--border)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--suggestion-hover)";
+            e.currentTarget.style.color = "var(--foreground)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "var(--suggestion-bg)";
+            e.currentTarget.style.color = "var(--muted)";
+          }}
         >
           <span className="mr-1.5 inline-block opacity-40 transition-opacity group-hover:opacity-70">
             &rarr;

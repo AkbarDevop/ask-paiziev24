@@ -29,16 +29,19 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--background)]">
+    <div
+      className="flex min-h-screen flex-col"
+      style={{ background: "var(--background)" }}
+    >
       {/* Chat messages area */}
       <div className="flex-1 overflow-y-auto px-4 pb-36 pt-8">
         <div className="mx-auto max-w-2xl space-y-5">
-          {/* Hero — shown when no messages */}
+          {/* Hero */}
           {messages.length === 0 && (
             <div className="flex flex-col items-center gap-10 pt-16">
               <AkmalAvatar size="lg" />
               <SuggestedQuestions onSelect={handleSuggestedQuestion} />
-              <p className="text-xs text-[var(--muted)]">
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
                 Powered by Gemini &middot; Context from public interviews &
                 writings
               </p>
@@ -56,11 +59,26 @@ export function ChatInterface() {
               <div className="mt-1 shrink-0">
                 <AkmalAvatar size="sm" />
               </div>
-              <div className="rounded-2xl bg-[var(--card)] px-4 py-3 shadow-sm ring-1 ring-[var(--border)]">
+              <div
+                className="rounded-2xl px-4 py-3"
+                style={{
+                  background: "var(--ai-bubble)",
+                  border: "1px solid var(--border)",
+                }}
+              >
                 <div className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--muted)] [animation-delay:-0.3s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--muted)] [animation-delay:-0.15s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--muted)]" />
+                  <span
+                    className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.3s]"
+                    style={{ background: "var(--muted)" }}
+                  />
+                  <span
+                    className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.15s]"
+                    style={{ background: "var(--muted)" }}
+                  />
+                  <span
+                    className="h-1.5 w-1.5 animate-bounce rounded-full"
+                    style={{ background: "var(--muted)" }}
+                  />
                 </div>
               </div>
             </div>
@@ -70,8 +88,14 @@ export function ChatInterface() {
         </div>
       </div>
 
-      {/* Input area — fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-[var(--border)] bg-[var(--background)]/80 backdrop-blur-xl">
+      {/* Input area */}
+      <div
+        className="fixed bottom-0 left-0 right-0 backdrop-blur-xl"
+        style={{
+          background: "var(--footer-bar)",
+          borderTop: "1px solid var(--border)",
+        }}
+      >
         <form
           onSubmit={handleSubmit}
           className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-4"
@@ -80,13 +104,25 @@ export function ChatInterface() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask Akmal anything..."
-            className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] shadow-sm outline-none transition-shadow placeholder:text-[var(--muted)] focus:ring-2 focus:ring-[var(--accent)]/10 focus:border-[var(--muted)]"
+            className="flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-all"
+            style={{
+              background: "var(--input-bg)",
+              color: "var(--foreground)",
+              border: "1px solid var(--input-border)",
+            }}
+            onFocus={(e) =>
+              (e.target.style.borderColor = "var(--input-focus)")
+            }
+            onBlur={(e) =>
+              (e.target.style.borderColor = "var(--input-border)")
+            }
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-sm transition-all hover:opacity-80 disabled:opacity-30 dark:text-zinc-900"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-30"
+            style={{ background: "var(--user-bubble)", color: "var(--user-text)" }}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -98,7 +134,10 @@ export function ChatInterface() {
             </svg>
           </button>
         </form>
-        <p className="pb-3 text-center text-[11px] text-[var(--muted)]/60">
+        <p
+          className="pb-3 text-center text-[11px]"
+          style={{ color: "var(--muted)", opacity: 0.6 }}
+        >
           AI simulation — not affiliated with Akmal Paiziev. Based on publicly
           available content.
         </p>

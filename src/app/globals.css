@@ -1,13 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafafa;
-  --foreground: #111111;
-  --muted: #737373;
-  --border: #e5e5e5;
-  --accent: #18181b;
-  --accent-light: #f4f4f5;
-  --card: #ffffff;
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --card: #f9fafb;
+  --user-bubble: #1a1a1a;
+  --user-text: #ffffff;
+  --ai-bubble: #f3f4f6;
+  --ai-text: #1a1a1a;
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --input-focus: #3b82f6;
+  --suggestion-bg: #ffffff;
+  --suggestion-hover: #f3f4f6;
+  --footer-bar: rgba(255, 255, 255, 0.85);
 }
 
 @theme inline {
@@ -18,13 +26,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --muted: #a1a1aa;
-    --border: #27272a;
-    --accent: #fafafa;
-    --accent-light: #18181b;
-    --card: #111113;
+    --background: #0a0a0a;
+    --foreground: #f0f0f0;
+    --muted: #9ca3af;
+    --border: #2a2a2e;
+    --card: #141416;
+    --user-bubble: #2563eb;
+    --user-text: #ffffff;
+    --ai-bubble: #1c1c20;
+    --ai-text: #e5e7eb;
+    --input-bg: #141416;
+    --input-border: #333338;
+    --input-focus: #3b82f6;
+    --suggestion-bg: #141416;
+    --suggestion-hover: #1c1c20;
+    --footer-bar: rgba(10, 10, 10, 0.85);
   }
 }
 
