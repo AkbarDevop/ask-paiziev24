@@ -99,18 +99,32 @@ function parseFilename(filename: string): {
   sourceUrl: string | null;
   language: string;
 } {
+  // Handle youtube/ subdirectory files
+  if (filename.startsWith("youtube/") || filename.startsWith("youtube\\")) {
+    return { sourceType: "youtube", sourceUrl: null, language: "uz" };
+  }
+
   const name = path.basename(filename, path.extname(filename));
   const parts = name.split("_");
   const sourceType = parts[0] || "article";
   const language = parts.includes("uz") ? "uz" : "en";
 
-  // Try to extract URL from first line of file
   return { sourceType, sourceUrl: null, language };
 }
 
 function extractUrl(content: string): string | null {
   const match = content.match(/URL:\s*(https?:\/\/\S+)/);
   return match ? match[1] : null;
+}
+
+function detectLanguage(content: string): string | null {
+  const match = content.match(/Language:\s*(\S+)/);
+  if (match) {
+    const lang = match[1].toLowerCase();
+    if (lang.includes("russian") || lang === "ru") return "ru";
+    if (lang.includes("english") || lang === "en") return "en";
+  }
+  return null;
 }
 
 // --- Main ---
@@ -126,23 +140,46 @@ async function main() {
     return;
   }
 
-  const files = fs
+  // Collect files from data/ and data/youtube/
+  const topFiles = fs
     .readdirSync(DATA_DIR)
-    .filter((f) => f.endsWith(".txt") || f.endsWith(".md"));
+    .filter((f) => f.endsWith(".txt") || f.endsWith(".md"))
+    .map((f) => path.join(DATA_DIR, f));
 
-  if (files.length === 0) {
+  const ytDir = path.join(DATA_DIR, "youtube");
+  const ytFiles = fs.existsSync(ytDir)
+    ? fs
+        .readdirSync(ytDir)
+        .filter((f) => f.endsWith(".txt"))
+        .map((f) => path.join(ytDir, f))
+    : [];
+
+  const allFiles = [...topFiles, ...ytFiles];
+
+  if (allFiles.length === 0) {
     console.log("No .txt or .md files found in data/ directory.");
     return;
   }
 
-  console.log(`Found ${files.length} file(s) to process.\n`);
+  console.log(`Found ${allFiles.length} file(s) to process (${topFiles.length} top-level + ${ytFiles.length} youtube).\n`);
+
+  // Clear existing data to avoid duplicates on re-ingestion
+  console.log("Clearing existing documents...");
+  const { error: delError } = await supabase.from("documents").delete().gte("id", 0);
+  if (delError) {
+    console.error(`Warning: could not clear existing data: ${delError.message}`);
+  } else {
+    console.log("Cleared existing documents.\n");
+  }
 
   let totalChunks = 0;
 
-  for (const file of files) {
-    const filePath = path.join(DATA_DIR, file);
+  for (const filePath of allFiles) {
+    const file = path.relative(DATA_DIR, filePath);
     const content = fs.readFileSync(filePath, "utf-8");
-    const { sourceType, language } = parseFilename(file);
+    const parsed = parseFilename(file);
+    const sourceType = parsed.sourceType;
+    const language = detectLanguage(content) || parsed.language;
     const sourceUrl = extractUrl(content);
 
     console.log(
