@@ -6,7 +6,7 @@
 
 **Chat with an AI clone of Akmal Paiziev** — serial entrepreneur, founder of Express24, MyTaxi, Workly, Maxtrack & [Numeo.ai](https://numeo.ai). Stanford GSB alum. Built Uzbekistan's first digital maps.
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-ask--paiziev24.netlify.app-blue?style=for-the-badge&logo=netlify)](https://ask-paiziev24.netlify.app)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-askpaiziev24.netlify.app-blue?style=for-the-badge&logo=netlify)](https://askpaiziev24.netlify.app)
 
 </div>
 
