@@ -6,7 +6,7 @@
 
 **Chat with an AI clone of Akmal Paiziev** — serial entrepreneur, founder of Express24, MyTaxi, Workly, Maxtrack & [Numeo.ai](https://numeo.ai). Stanford GSB alum. Built Uzbekistan's first digital maps.
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-askakmal.netlify.app-blue?style=for-the-badge&logo=netlify)](https://askakmal.netlify.app)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-ask--paiziev24.netlify.app-blue?style=for-the-badge&logo=netlify)](https://ask-paiziev24.netlify.app)
 
 </div>
 
@@ -24,22 +24,24 @@ Ask it anything about startups, building companies in emerging markets, hiring, 
 User question → Keyword extraction → Supabase vector search → Context retrieval → Gemini 2.5 Flash → Streamed response
 ```
 
-1. **Knowledge Base** — 950+ text chunks from 100+ sources ingested into Supabase (Postgres + pgvector)
-2. **Retrieval** — Relevant context is pulled from the database based on the user's question
+1. **Knowledge Base** — 860+ text chunks from 85+ sources ingested into Supabase (Postgres + pgvector + RLS)
+2. **Retrieval** — Relevant context is pulled via keyword search with safe parameterized queries
 3. **Generation** — Gemini 2.5 Flash generates a response grounded in retrieved context, speaking as Akmal
 4. **Streaming** — Response streams token-by-token for a real-time chat experience
+5. **Security** — Rate limiting, input validation, Row Level Security, no client-exposed keys
 
 ## Data Sources
 
 | Source | Count | Description |
 |--------|-------|-------------|
-| YouTube transcripts | 62 videos | Startup Maktabi series, podcasts (CACTUZ, AVLO, SEREDIN, Fikr yetakchilari), interviews on 20+ channels |
+| YouTube transcripts | 74 videos | Startup Maktabi series, podcasts (CACTUZ, AVLO, SEREDIN, Fikr yetakchilari, BUSOQQA, CHOYXONA), interviews on 25+ channels, panels & talks |
 | Telegram book | 114 chapters | *"From Tashkent to Silicon Valley"* |
-| Articles | 5 | Euronews, Tribune, Kapital.uz, DigitalBusiness.kz |
-| LinkedIn | 1 | Profile, posts, about section |
+| Articles | 5 | Euronews, Tribune, Kapital.uz, DigitalBusiness.kz, Numeo.ai |
+| LinkedIn | 1 | Profile, posts, about section, Numeo description |
 | Interviews | 1 | The Tech interview |
 | Bios | 2 | Startup Grind, Outsource |
 
+**Total:** 861 chunks across 85+ source files
 **Languages:** English, Uzbek, Russian
 
 ## Tech Stack
@@ -61,9 +63,11 @@ User question → Keyword extraction → Supabase vector search → Context retr
 - Auto-resizing textarea input
 - Light/dark mode (system preference)
 - Rate limiting (30 req/min per IP)
-- Input validation & sanitization
-- Security headers + Row Level Security on database
-- Mobile-first responsive design
+- Input validation & sanitization (max 2000 chars, max 50 messages)
+- Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
+- Row Level Security on database (SELECT-only, no client-exposed keys)
+- Safe parameterized Supabase queries (no raw SQL)
+- Mobile-first responsive design with safe-area-inset support
 
 ## Getting Started
 
@@ -123,11 +127,13 @@ src/
 │   ├── supabase.ts          # DB client
 │   └── embeddings.ts        # Embedding utilities
 scripts/
-├── chunk-and-embed.ts       # Data ingestion pipeline
-└── download-remaining-yt.py # YouTube transcript downloader
+├── chunk-and-embed.ts       # Data ingestion (clears + re-inserts, scans data/ + data/youtube/)
+└── download-remaining-yt.py # YouTube transcript downloader (57 external channel videos)
 data/
-├── *.txt                    # Articles, interviews, bios
-└── youtube/*.txt            # YouTube transcripts
+├── *.txt                    # Articles, interviews, bios, LinkedIn, Telegram book
+└── youtube/*.txt            # 74 YouTube transcripts (auto-generated captions)
+supabase/
+└── migrations/              # RLS, source type constraints, language support
 ```
 
 ## License
