@@ -17,10 +17,10 @@ import { ThinkingIndicator } from "./ThinkingIndicator";
 import type { Language } from "@/lib/prompts";
 
 export function ChatInterface() {
+  const [lang, setLang] = useState<Language>("en");
   const { messages, sendMessage, setMessages, status, error } = useChat();
   const [input, setInput] = useState("");
   const [lastFailedInput, setLastFailedInput] = useState("");
-  const [lang, setLang] = useState<Language>("en");
   const [showThinking, setShowThinking] = useState(false);
   const thinkingTimer = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -62,7 +62,8 @@ export function ChatInterface() {
   const submitMessage = (text: string) => {
     if (!text.trim() || isLoading) return;
     setLastFailedInput(text);
-    sendMessage({ text });
+    const prefix = lang === "uz" ? "[Respond in Uzbek / O'zbek tilida javob bering]\n" : "";
+    sendMessage({ text: prefix + text });
     setInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -102,7 +103,8 @@ export function ChatInterface() {
   };
 
   const handleSuggestedQuestion = (question: string) => {
-    sendMessage({ text: question });
+    const prefix = lang === "uz" ? "[Respond in Uzbek / O'zbek tilida javob bering]\n" : "";
+    sendMessage({ text: prefix + question });
   };
 
   const handleNewChat = () => {
@@ -124,9 +126,10 @@ export function ChatInterface() {
         style={{
           background: "var(--footer-bar)",
           borderBottom: "1px solid var(--border)",
+          paddingTop: "env(safe-area-inset-top)",
         }}
       >
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-3 py-2.5 sm:px-4 sm:py-3">
           <button
             onClick={handleNewChat}
             className="flex items-center gap-2.5 transition-opacity hover:opacity-75"
@@ -201,11 +204,11 @@ export function ChatInterface() {
       </header>
 
       {/* Chat messages area */}
-      <div className="chat-bg flex-1 overflow-y-auto px-4 pb-32 pt-6">
+      <div className="chat-bg flex-1 overflow-y-auto px-3 pb-28 pt-4 sm:px-4 sm:pb-32 sm:pt-6">
         <div className="mx-auto max-w-2xl space-y-5">
           {/* Hero */}
           {messages.length === 0 && (
-            <div className="hero-glow flex flex-col items-center gap-10 pt-12">
+            <div className="hero-glow flex flex-col items-center gap-8 pt-8 sm:gap-10 sm:pt-12">
               <AkmalAvatar size="lg" />
               <SuggestedQuestions onSelect={handleSuggestedQuestion} lang={lang} />
               <p className="text-xs" style={{ color: "var(--muted)" }}>
@@ -274,11 +277,12 @@ export function ChatInterface() {
         style={{
           background: "var(--footer-bar)",
           borderTop: "1px solid var(--border)",
+          paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
         <form
           onSubmit={handleSubmit}
-          className="mx-auto flex max-w-2xl items-end gap-3 px-4 py-3"
+          className="mx-auto flex max-w-2xl items-end gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3"
         >
           <div className="relative flex-1">
             <textarea
@@ -288,7 +292,7 @@ export function ChatInterface() {
               onKeyDown={handleKeyDown}
               placeholder={lang === "en" ? "Ask Akmal anything..." : "Akmalga savol bering..."}
               rows={1}
-              className="w-full resize-none rounded-xl px-4 py-3 text-sm outline-none transition-all"
+              className="w-full resize-none rounded-xl px-3 py-2.5 text-[14px] outline-none transition-all sm:px-4 sm:py-3 sm:text-sm"
               style={{
                 background: "var(--input-bg)",
                 color: "var(--foreground)",
@@ -322,21 +326,21 @@ export function ChatInterface() {
             </svg>
           </button>
         </form>
-        <div className="flex items-center justify-center gap-2 pb-3">
+        <div className="flex items-center justify-center gap-2 pb-2 sm:pb-3">
           <p
-            className="text-center text-[11px]"
+            className="text-center text-[10px] sm:text-[11px]"
             style={{ color: "var(--muted)", opacity: 0.6 }}
           >
             AI simulation — not affiliated with Akmal Paiziev
           </p>
           <span
-            className="text-[11px]"
+            className="hidden text-[11px] sm:inline"
             style={{ color: "var(--muted)", opacity: 0.3 }}
           >
             &middot;
           </span>
           <p
-            className="text-[11px]"
+            className="hidden text-[11px] sm:block"
             style={{ color: "var(--muted)", opacity: 0.4 }}
           >
             Enter to send, Shift+Enter for new line

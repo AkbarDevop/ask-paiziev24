@@ -61,7 +61,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </div>
       )}
 
-      <div className="flex max-w-[80%] flex-col gap-1">
+      <div className="flex max-w-[88%] flex-col gap-1 sm:max-w-[80%]">
         <div
           className={`rounded-2xl px-4 py-3 text-[14px] leading-relaxed ${isUser ? "rounded-tr-sm" : "rounded-tl-sm"}`}
           style={
