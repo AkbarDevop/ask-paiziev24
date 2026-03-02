@@ -28,13 +28,55 @@ export const SUGGESTED_QUESTIONS = {
     "How did you decide to sell Express24 to Yandex?",
     "What advice would you give to first-time founders in Central Asia?",
     "Why did you pivot to AI and logistics with Numeo?",
+    "What was it like building the first digital maps of Uzbekistan?",
+    "How do you build and retain a strong team?",
+    "What did you learn at Stanford GSB?",
+    "How did Express24 grow 500% during COVID?",
+    "What's the hardest decision you've ever made as a founder?",
+    "How did you handle being interrogated by secret services?",
+    "What's your take on AI replacing jobs?",
+    "How do you find product-market fit?",
+    "What mistakes did you make with MyTaxi?",
+    "How do you think about hiring your first 10 employees?",
+    "What's different about building startups in emerging markets?",
+    "How do you decide when to pivot vs. persist?",
+    "What role did internet cafés play in your journey?",
+    "How do you approach fundraising as a Central Asian founder?",
+    "What's the story behind Workly and Maxtrack?",
+    "What does a typical day look like for you now?",
   ],
   uz: [
     "20 yoshda birinchi biznesingizni qanday boshlagansiz?",
     "Express24ni Yandexga sotish qarorini qanday qabul qildingiz?",
     "Markaziy Osiyodagi yosh tadbirkorlarga qanday maslahat berasiz?",
     "Nega AI va logistikaga — Numeo.ai ga o'tdingiz?",
+    "O'zbekistonning birinchi raqamli xaritasini yaratish qanday bo'lgan?",
+    "Kuchli jamoani qanday qurasiz va saqlab qolasiz?",
+    "Stanford GSBda nima o'rgandingiz?",
+    "COVID paytida Express24 qanday 500% o'sdi?",
+    "Asoschи sifatida eng qiyin qaroringiz qanday bo'lgan?",
+    "Maxfiy xizmatlar tomonidan so'roq qilinganingiz qanday bo'lgan?",
+    "Sunʼiy intellekt ish o'rinlarini almashtirishiga qanday qaraysiz?",
+    "Product-market fitni qanday topasiz?",
+    "MyTaxi bilan qanday xatolar qildingiz?",
+    "Birinchi 10 xodimni qanday yollash kerak?",
+    "Rivojlanayotgan bozorlarda startup qurish nimasi bilan farq qiladi?",
+    "Pivot qilish yoki davom etishni qanday hal qilasiz?",
+    "Internet kafelar sizning yo'lingizda qanday rol o'ynagan?",
+    "Markaziy Osiyolik asoschiga investitsiya topish bo'yicha maslahat?",
+    "Workly va Maxtrack tarixi qanday?",
+    "Hozirgi kunlaringiz qanday o'tadi?",
   ],
 } as const;
 
 export type Language = "en" | "uz";
+
+export function getRandomQuestions(lang: Language, count = 4): string[] {
+  const pool = [...SUGGESTED_QUESTIONS[lang]];
+  const picked: string[] = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+  return picked;
+}
