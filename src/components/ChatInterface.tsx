@@ -14,7 +14,7 @@ import { AkmalAvatar } from "./AkmalAvatar";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { MessageBubble } from "./MessageBubble";
 import { ThinkingIndicator } from "./ThinkingIndicator";
-import type { Language } from "@/lib/prompts";
+import { UI_TEXT, type Language } from "@/lib/prompts";
 
 export function ChatInterface() {
   const [lang, setLang] = useState<Language>("en");
@@ -26,6 +26,7 @@ export function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const t = UI_TEXT[lang];
   const isLoading = status === "streaming" || status === "submitted";
   const isWaiting = status === "submitted"; // waiting for first token
 
@@ -96,10 +97,10 @@ export function ChatInterface() {
   const getErrorMessage = (err: Error) => {
     const msg = err.message || "";
     if (msg.includes("429") || msg.toLowerCase().includes("rate"))
-      return "Too many requests. Please wait a moment and try again.";
+      return t.errorRate;
     if (msg.includes("500") || msg.includes("503"))
-      return "Akmal is temporarily unavailable. Please try again shortly.";
-    return "Something went wrong. Please try again.";
+      return t.errorServer;
+    return t.errorGeneric;
   };
 
   const handleSuggestedQuestion = (question: string) => {
@@ -145,7 +146,7 @@ export function ChatInterface() {
               className="text-sm font-semibold tracking-tight"
               style={{ color: "var(--foreground)" }}
             >
-              Ask Akmal
+              {lang === "en" ? "Ask Akmal" : "Akmalga savol"}
             </span>
           </button>
           <div className="flex items-center gap-2">
@@ -196,7 +197,7 @@ export function ChatInterface() {
                   e.currentTarget.style.color = "var(--muted)";
                 }}
               >
-                New chat
+                {t.newChat}
               </button>
             )}
           </div>
@@ -209,23 +210,22 @@ export function ChatInterface() {
           {/* Hero */}
           {messages.length === 0 && (
             <div className="hero-glow flex flex-col items-center gap-8 pt-8 sm:gap-10 sm:pt-12">
-              <AkmalAvatar size="lg" />
+              <AkmalAvatar size="lg" lang={lang} />
               <SuggestedQuestions onSelect={handleSuggestedQuestion} lang={lang} />
               <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Powered by Gemini &middot; Context from public interviews &
-                writings
+                {t.poweredBy}
               </p>
             </div>
           )}
 
           {/* Messages */}
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble key={message.id} message={message} lang={lang} />
           ))}
 
           {/* Thinking indicator — only shows if there's actual latency */}
           {showThinking && messages[messages.length - 1]?.role === "user" && (
-            <ThinkingIndicator />
+            <ThinkingIndicator lang={lang} />
           )}
 
           {/* Error message */}
@@ -261,7 +261,7 @@ export function ChatInterface() {
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
                     <path fillRule="evenodd" d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 1 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.025-.273Z" clipRule="evenodd" />
                   </svg>
-                  Try again
+                  {t.tryAgain}
                 </button>
               </div>
             </div>
@@ -290,7 +290,7 @@ export function ChatInterface() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={lang === "en" ? "Ask Akmal anything..." : "Akmalga savol bering..."}
+              placeholder={t.placeholder}
               rows={1}
               className="w-full resize-none rounded-xl px-3 py-2.5 text-[14px] outline-none transition-all sm:px-4 sm:py-3 sm:text-sm"
               style={{
@@ -331,7 +331,7 @@ export function ChatInterface() {
             className="text-center text-[10px] sm:text-[11px]"
             style={{ color: "var(--muted)", opacity: 0.6 }}
           >
-            AI simulation — not affiliated with Akmal Paiziev
+            {t.disclaimer}
           </p>
           <span
             className="hidden text-[11px] sm:inline"
@@ -343,7 +343,7 @@ export function ChatInterface() {
             className="hidden text-[11px] sm:block"
             style={{ color: "var(--muted)", opacity: 0.4 }}
           >
-            Enter to send, Shift+Enter for new line
+            {t.inputHint}
           </p>
         </div>
       </div>

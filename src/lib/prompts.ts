@@ -71,6 +71,58 @@ export const SUGGESTED_QUESTIONS = {
 
 export type Language = "en" | "uz";
 
+export const UI_TEXT = {
+  en: {
+    heroTitle: "Ask Akmal",
+    heroDescription:
+      "AI clone of Akmal Paiziev — serial entrepreneur, founder of Express24, MyTaxi & Numeo.ai",
+    poweredBy: "Powered by Gemini · Context from public interviews & writings",
+    newChat: "New chat",
+    placeholder: "Ask Akmal anything...",
+    moreSuggestions: "More suggestions",
+    copy: "Copy",
+    copied: "Copied",
+    share: "Share",
+    tryAgain: "Try again",
+    disclaimer: "AI simulation — not affiliated with Akmal Paiziev",
+    inputHint: "Enter to send, Shift+Enter for new line",
+    thinkingSteps: [
+      "Searching through interviews",
+      "Reading essays and articles",
+      "Browsing Telegram posts",
+      "Preparing response",
+    ],
+    errorRate: "Too many requests. Please wait a moment and try again.",
+    errorServer: "Akmal is temporarily unavailable. Please try again shortly.",
+    errorGeneric: "Something went wrong. Please try again.",
+  },
+  uz: {
+    heroTitle: "Akmalga savol bering",
+    heroDescription:
+      "Akmal Paizievning AI kloni — serial tadbirkor, Express24, MyTaxi va Numeo.ai asoschisi",
+    poweredBy:
+      "Gemini asosida · Ommaviy intervyu va maqolalardan kontekst",
+    newChat: "Yangi suhbat",
+    placeholder: "Akmalga savol bering...",
+    moreSuggestions: "Boshqa savollar",
+    copy: "Nusxalash",
+    copied: "Nusxalandi",
+    share: "Ulashish",
+    tryAgain: "Qayta urinish",
+    disclaimer: "AI simulyatsiya — Akmal Paiziev bilan bog'liq emas",
+    inputHint: "Yuborish — Enter, yangi qator — Shift+Enter",
+    thinkingSteps: [
+      "Intervyularni qidiryapman",
+      "Maqolalarni o'qiyapman",
+      "Telegram postlarini ko'ryapman",
+      "Javob tayyorlayapman",
+    ],
+    errorRate: "Juda ko'p so'rov. Iltimos, biroz kuting va qayta urinib ko'ring.",
+    errorServer: "Akmal vaqtincha mavjud emas. Iltimos, keyinroq urinib ko'ring.",
+    errorGeneric: "Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.",
+  },
+} as const;
+
 export function getRandomQuestions(lang: Language, count = 4): string[] {
   const pool = [...SUGGESTED_QUESTIONS[lang]];
   const picked: string[] = [];

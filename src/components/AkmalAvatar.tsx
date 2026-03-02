@@ -1,9 +1,12 @@
 "use client";
 
 import Image from "next/image";
+import type { Language } from "@/lib/prompts";
+import { UI_TEXT } from "@/lib/prompts";
 
-export function AkmalAvatar({ size = "lg" }: { size?: "sm" | "lg" }) {
+export function AkmalAvatar({ size = "lg", lang = "en" }: { size?: "sm" | "lg"; lang?: Language }) {
   const dimensions = size === "lg" ? 96 : 32;
+  const t = UI_TEXT[lang];
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -26,14 +29,13 @@ export function AkmalAvatar({ size = "lg" }: { size?: "sm" | "lg" }) {
             className="text-2xl font-bold tracking-tight"
             style={{ color: "var(--foreground)" }}
           >
-            Ask Akmal
+            {t.heroTitle}
           </h1>
           <p
             className="mt-1 max-w-sm text-sm leading-relaxed"
             style={{ color: "var(--muted)" }}
           >
-            AI clone of Akmal Paiziev — serial entrepreneur, founder of
-            Express24, MyTaxi & Numeo.ai
+            {t.heroDescription}
           </p>
         </div>
       )}

@@ -1,15 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { Language } from "@/lib/prompts";
+import { UI_TEXT } from "@/lib/prompts";
 
-const STEPS = [
-  "Searching through interviews",
-  "Reading essays and articles",
-  "Browsing Telegram posts",
-  "Preparing response",
-];
-
-export function ThinkingIndicator() {
+export function ThinkingIndicator({ lang = "en" }: { lang?: Language }) {
+  const steps = UI_TEXT[lang].thinkingSteps;
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
 
@@ -17,12 +13,12 @@ export function ThinkingIndicator() {
     const interval = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
-        setIndex((prev) => (prev + 1) % STEPS.length);
+        setIndex((prev) => (prev + 1) % steps.length);
         setVisible(true);
       }, 200);
     }, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [steps.length]);
 
   return (
     <div className="animate-fade-in flex items-center gap-2 py-1 pl-1">
@@ -43,7 +39,7 @@ export function ThinkingIndicator() {
           transform: visible ? "translateY(0)" : "translateY(4px)",
         }}
       >
-        {STEPS[index]}
+        {steps[index]}
       </span>
     </div>
   );
