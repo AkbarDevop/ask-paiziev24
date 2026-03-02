@@ -9,10 +9,13 @@
  * Each file should be named like: interview_the-tech.txt, article_tribune.txt, etc.
  * The part before the underscore becomes the source_type.
  *
- * Embedding generation is optional — set OPENAI_API_KEY to enable.
+ * Embedding generation uses Gemini text-embedding-004 (free, 768D).
+ * Requires GOOGLE_GENERATIVE_AI_API_KEY in environment.
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { embedMany } from "ai";
+import { google } from "@ai-sdk/google";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -39,23 +42,22 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- Optional: OpenAI for embeddings ---
+// --- Gemini embeddings (free, 768D) ---
 let embedBatch: ((texts: string[]) => Promise<number[][]>) | null = null;
 
 async function initEmbeddings() {
-  if (process.env.OPENAI_API_KEY) {
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    const model = google.embedding("gemini-embedding-001");
+    const providerOptions = { google: { outputDimensionality: 768 } };
     embedBatch = async (texts: string[]) => {
-      const response = await openai.embeddings.create({
-        model: "text-embedding-3-small",
-        input: texts,
-      });
-      return response.data.map((d) => d.embedding);
+      const { embeddings } = await embedMany({ model, values: texts, providerOptions });
+      return embeddings;
     };
-    console.log("Embeddings: ENABLED (OpenAI text-embedding-3-small)\n");
+    console.log("Embeddings: ENABLED (Gemini gemini-embedding-001, 768D)\n");
   } else {
-    console.log("Embeddings: DISABLED (no OPENAI_API_KEY — text-only mode)\n");
+    console.log(
+      "Embeddings: DISABLED (no GOOGLE_GENERATIVE_AI_API_KEY)\n"
+    );
   }
 }
 

@@ -1,18 +1,34 @@
-import OpenAI from "openai";
+import { embed, embedMany } from "ai";
+import { google } from "@ai-sdk/google";
 
-let _openai: OpenAI | null = null;
+const embeddingModel = google.embedding("gemini-embedding-001");
 
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
-  return _openai;
+const providerOptions = {
+  google: { outputDimensionality: 768 },
+};
+
+/**
+ * Generate embedding for a single text string.
+ * Returns a 768-dimensional vector (Gemini gemini-embedding-001).
+ */
+export async function getEmbedding(text: string): Promise<number[]> {
+  const { embedding } = await embed({
+    model: embeddingModel,
+    value: text,
+    providerOptions,
+  });
+  return embedding;
 }
 
-export async function getEmbedding(text: string): Promise<number[]> {
-  const response = await getOpenAI().embeddings.create({
-    model: "text-embedding-3-small",
-    input: text,
+/**
+ * Generate embeddings for multiple texts in batch.
+ * Returns array of 768-dimensional vectors.
+ */
+export async function getEmbeddings(texts: string[]): Promise<number[][]> {
+  const { embeddings } = await embedMany({
+    model: embeddingModel,
+    values: texts,
+    providerOptions,
   });
-  return response.data[0].embedding;
+  return embeddings;
 }

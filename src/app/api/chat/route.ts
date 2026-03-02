@@ -1,6 +1,7 @@
 import { streamText } from "ai";
 import { google } from "@ai-sdk/google";
 import { getSupabase } from "@/lib/supabase";
+import { getEmbedding } from "@/lib/embeddings";
 import { AKMAL_SYSTEM_PROMPT } from "@/lib/prompts";
 
 export const maxDuration = 60;
@@ -120,41 +121,62 @@ export async function POST(req: Request) {
 
   const { messages } = parsed;
   const userMessage = messages[messages.length - 1]?.content || "";
-  const keywords = extractKeywords(userMessage);
 
-  // --- Fetch context (safe parameterized queries via Supabase client) ---
-  let chunks;
-  if (keywords.length > 0) {
-    // Build safe OR filter using Supabase's .or() — fully parameterized, no raw SQL
-    const orFilter = keywords
-      .map((k) => `content.ilike.%${k}%`)
-      .join(",");
+  // --- Fetch context: vector search (primary) + keyword fallback ---
+  type Chunk = { content: string; source_type: string; source_url: string };
+  let chunks: Chunk[] | null = null;
 
-    const { data } = await getSupabase()
-      .from("documents")
-      .select("content, source_type, source_url")
-      .or(orFilter)
-      .order("id")
-      .limit(20);
-    chunks = data;
+  // 1. Try vector similarity search via match_documents RPC
+  try {
+    const queryEmbedding = await getEmbedding(userMessage);
 
-    // Supplement if too few results
-    if (!chunks || chunks.length < 5) {
+    const { data, error } = await getSupabase().rpc("match_documents", {
+      query_embedding: JSON.stringify(queryEmbedding),
+      match_threshold: 0.3,
+      match_count: 10,
+    });
+
+    if (!error && data && data.length > 0) {
+      chunks = data as Chunk[];
+    }
+  } catch (err) {
+    console.error("Vector search failed, falling back to keyword search:", err);
+  }
+
+  // 2. Fallback: keyword ILIKE search
+  if (!chunks || chunks.length < 3) {
+    const keywords = extractKeywords(userMessage);
+
+    if (keywords.length > 0) {
+      const orFilter = keywords
+        .map((k) => `content.ilike.%${k}%`)
+        .join(",");
+
+      const { data } = await getSupabase()
+        .from("documents")
+        .select("content, source_type, source_url")
+        .or(orFilter)
+        .order("id")
+        .limit(20);
+
+      if (data && data.length > 0) {
+        // Merge: vector results first, then keyword results (deduplicated)
+        const existing = new Set((chunks || []).map((c) => c.content));
+        const newChunks = (data as Chunk[]).filter((c) => !existing.has(c.content));
+        chunks = [...(chunks || []), ...newChunks].slice(0, 15);
+      }
+    }
+
+    // 3. Last resort: generic fallback
+    if (!chunks || chunks.length < 3) {
       const { data: fallback } = await getSupabase()
         .from("documents")
         .select("content, source_type, source_url")
+        .in("source_type", ["bio", "interview", "article"])
         .order("id")
         .limit(15);
-      chunks = [...(chunks || []), ...(fallback || [])];
+      chunks = [...(chunks || []), ...((fallback as Chunk[]) || [])];
     }
-  } else {
-    const { data } = await getSupabase()
-      .from("documents")
-      .select("content, source_type, source_url")
-      .in("source_type", ["bio", "interview", "article"])
-      .order("id")
-      .limit(15);
-    chunks = data;
   }
 
   // --- Build context ---
