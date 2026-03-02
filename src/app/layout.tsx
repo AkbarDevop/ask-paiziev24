@@ -11,13 +11,13 @@ export const metadata: Metadata = {
   title: "Ask Akmal — Talk to Akmal Paiziev's AI Clone",
   description:
     "Chat with an AI version of Akmal Paiziev, serial entrepreneur and founder of Express24, MyTaxi, and Numeo.ai. Ask about startups, Uzbekistan's tech scene, and building companies.",
-  metadataBase: new URL("https://askakmal.netlify.app"),
+  metadataBase: new URL("https://askpaiziev24.netlify.app"),
   openGraph: {
     title: "Ask Akmal — AI Clone of Akmal Paiziev",
     description:
       "Chat with an AI trained on Akmal Paiziev's interviews, articles, and public writings. Founder of Express24, MyTaxi & Numeo.ai.",
     type: "website",
-    url: "https://askakmal.netlify.app",
+    url: "https://askpaiziev24.netlify.app",
     siteName: "Ask Akmal",
     images: [
       {
