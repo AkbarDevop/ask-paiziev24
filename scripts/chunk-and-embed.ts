@@ -196,10 +196,15 @@ async function main() {
     for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
       const batch = chunks.slice(i, i + BATCH_SIZE);
 
-      // Generate embeddings if available
+      // Generate embeddings if available (gracefully skip on quota errors)
       let embeddings: number[][] | null = null;
       if (embedBatch) {
-        embeddings = await embedBatch(batch);
+        try {
+          embeddings = await embedBatch(batch);
+        } catch {
+          console.log("  Embedding quota exceeded — inserting without embeddings");
+          embedBatch = null; // Disable for remaining batches
+        }
       }
 
       const rows = batch.map((chunk, j) => ({
