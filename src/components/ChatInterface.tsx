@@ -146,7 +146,7 @@ export function ChatInterface() {
               className="text-sm font-semibold tracking-tight"
               style={{ color: "var(--foreground)" }}
             >
-              {lang === "en" ? "Ask Akmal" : "Akmalga savol"}
+              Ask Akmal
             </span>
           </button>
           <div className="flex items-center gap-2">

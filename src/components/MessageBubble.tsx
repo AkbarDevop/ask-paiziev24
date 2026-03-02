@@ -17,7 +17,7 @@ export function MessageBubble({ message, lang = "en" }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
   const t = UI_TEXT[lang];
 
-  const text =
+  const rawText =
     message.parts
       ?.filter(
         (part): part is Extract<typeof part, { type: "text" }> =>
@@ -25,6 +25,11 @@ export function MessageBubble({ message, lang = "en" }: MessageBubbleProps) {
       )
       .map((part) => part.text)
       .join("") || "";
+
+  // Strip the hidden language prefix so it doesn't show in the bubble
+  const text = isUser
+    ? rawText.replace(/^\[Respond in Uzbek \/ O'zbek tilida javob bering\]\n/, "")
+    : rawText;
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(text);
