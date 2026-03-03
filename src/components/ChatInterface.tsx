@@ -14,6 +14,7 @@ import { AkmalAvatar } from "./AkmalAvatar";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 import { MessageBubble } from "./MessageBubble";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+import { FollowUpChips } from "./FollowUpChips";
 import { UI_TEXT, type Language } from "@/lib/prompts";
 
 export function ChatInterface() {
@@ -22,13 +23,64 @@ export function ChatInterface() {
   const [input, setInput] = useState("");
   const [lastFailedInput, setLastFailedInput] = useState("");
   const [showThinking, setShowThinking] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const thinkingTimer = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatAreaRef = useRef<HTMLDivElement>(null);
+  const restoredRef = useRef(false);
 
   const t = UI_TEXT[lang];
   const isLoading = status === "streaming" || status === "submitted";
   const isWaiting = status === "submitted"; // waiting for first token
+  const lastMessage = messages[messages.length - 1];
+  const showFollowUps =
+    !isLoading && messages.length > 0 && lastMessage?.role === "assistant";
+
+  // Restore chat, language, and theme from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedChat = localStorage.getItem("ask-akmal-chat");
+      if (savedChat) {
+        const parsed = JSON.parse(savedChat);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+      const savedLang = localStorage.getItem("ask-akmal-lang");
+      if (savedLang === "en" || savedLang === "uz") setLang(savedLang);
+
+      const savedTheme = localStorage.getItem("ask-akmal-theme");
+      if (savedTheme === "light" || savedTheme === "dark") {
+        setTheme(savedTheme);
+        document.documentElement.dataset.theme = savedTheme;
+      } else {
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const detected = prefersDark ? "dark" : "light";
+        setTheme(detected);
+        document.documentElement.dataset.theme = detected;
+      }
+    } catch {}
+    restoredRef.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist messages to localStorage
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    if (messages.length > 0) {
+      localStorage.setItem("ask-akmal-chat", JSON.stringify(messages));
+    } else {
+      localStorage.removeItem("ask-akmal-chat");
+    }
+  }, [messages]);
+
+  // Persist language preference
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    localStorage.setItem("ask-akmal-lang", lang);
+  }, [lang]);
 
   // Only show thinking after a brief delay — if response streams fast, skip it entirely
   useEffect(() => {
@@ -46,6 +98,18 @@ export function ChatInterface() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Scroll-to-bottom button visibility
+  useEffect(() => {
+    const el = chatAreaRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBtn(distanceFromBottom > 120);
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Auto-resize textarea
   const resizeTextarea = useCallback(() => {
@@ -108,8 +172,23 @@ export function ChatInterface() {
     sendMessage({ text: prefix + question });
   };
 
+  const toggleTheme = useCallback(() => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("ask-akmal-theme", next);
+  }, [theme]);
+
+  const scrollToBottom = useCallback(() => {
+    chatAreaRef.current?.scrollTo({
+      top: chatAreaRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, []);
+
   const handleNewChat = () => {
     setMessages([]);
+    localStorage.removeItem("ask-akmal-chat");
     setInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -150,6 +229,32 @@ export function ChatInterface() {
             </span>
           </button>
           <div className="flex items-center gap-2">
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{ color: "var(--muted)", border: "1px solid var(--border)" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--suggestion-hover)";
+                e.currentTarget.style.color = "var(--foreground)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--muted)";
+              }}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
+                  <circle cx="12" cy="12" r="5" />
+                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              )}
+            </button>
             {/* Language toggle */}
             <div
               className="flex overflow-hidden rounded-lg text-[11px] font-medium"
@@ -205,7 +310,7 @@ export function ChatInterface() {
       </header>
 
       {/* Chat messages area */}
-      <div className="chat-bg flex-1 overflow-y-auto px-3 pb-28 pt-4 sm:px-4 sm:pb-32 sm:pt-6">
+      <div ref={chatAreaRef} className="chat-bg flex-1 overflow-y-auto px-3 pb-28 pt-4 sm:px-4 sm:pb-32 sm:pt-6">
         <div className="mx-auto max-w-2xl space-y-5">
           {/* Hero */}
           {messages.length === 0 && (
@@ -219,8 +324,17 @@ export function ChatInterface() {
           )}
 
           {/* Messages */}
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} lang={lang} />
+          {messages.map((message, index) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              lang={lang}
+              isStreaming={
+                isLoading &&
+                index === messages.length - 1 &&
+                message.role === "assistant"
+              }
+            />
           ))}
 
           {/* Thinking indicator — only shows if there's actual latency */}
@@ -267,9 +381,31 @@ export function ChatInterface() {
             </div>
           )}
 
+          {/* Follow-up suggestion chips */}
+          {showFollowUps && (
+            <FollowUpChips onSelect={handleSuggestedQuestion} lang={lang} />
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {/* Scroll to bottom button */}
+      {showScrollBtn && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-24 right-4 z-20 flex h-9 w-9 items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 active:scale-95 animate-fade-in sm:bottom-28"
+          style={{
+            background: "var(--ai-bubble)",
+            border: "1px solid var(--border)",
+            color: "var(--muted)",
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
+            <path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" />
+          </svg>
+        </button>
+      )}
 
       {/* Input area */}
       <div
