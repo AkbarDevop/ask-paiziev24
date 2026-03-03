@@ -188,50 +188,49 @@ export async function POST(req: Request) {
     }
   }
 
-  // --- Number unique sources for inline citations ---
-  const sourceMap = new Map<string, number>();
-  const sourceList: { num: number; type: string; url: string }[] = [];
-  if (chunks?.length) {
-    for (const c of chunks) {
-      const key = c.source_url || c.source_type;
-      if (!sourceMap.has(key)) {
-        const num = sourceMap.size + 1;
-        sourceMap.set(key, num);
-        sourceList.push({ num, type: c.source_type, url: c.source_url });
-      }
-    }
-  }
-
-  // --- Build context with numbered sources ---
-  let context = "No relevant context found.";
-  if (chunks?.length) {
-    context = chunks
-      .map((c) => {
-        const key = c.source_url || c.source_type;
-        const num = sourceMap.get(key);
-        return `[Source ${num}: ${c.source_type}]\n${c.content}`;
-      })
-      .join("\n\n---\n\n");
-
-    // Append source reference list for citations
-    context +=
-      "\n\n---\n\nSOURCE REFERENCE:\n" +
-      sourceList
+  // --- Build context ---
+  const context = chunks?.length
+    ? chunks
         .map(
-          (s) =>
-            `[${s.num}] ${SOURCE_LABELS[s.type] || s.type}${s.url ? ` — ${s.url}` : ""}`
+          (c) => `[Source: ${c.source_type}]\n${c.content}`
         )
-        .join("\n");
-  }
+        .join("\n\n---\n\n")
+    : "No relevant context found.";
 
   const systemPrompt = AKMAL_SYSTEM_PROMPT.replace(
     "{retrieved_context}",
     context
   );
 
+  // Collect unique sources for UI citations
+  const uniqueSources: { type: string; url: string; title: string }[] = [];
+  if (chunks?.length) {
+    const seen = new Set<string>();
+    for (const c of chunks) {
+      if (!seen.has(c.source_type)) {
+        seen.add(c.source_type);
+        uniqueSources.push({
+          type: c.source_type,
+          url: c.source_url || "",
+          title: SOURCE_LABELS[c.source_type] || c.source_type,
+        });
+      }
+    }
+  }
+
   try {
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        // Send source data for expandable UI toggle
+        for (const src of uniqueSources) {
+          writer.write({
+            type: "source-url",
+            sourceId: src.type,
+            url: src.url || src.type,
+            title: src.title,
+          });
+        }
+
         const result = streamText({
           model: google("gemini-2.5-flash"),
           system: systemPrompt,

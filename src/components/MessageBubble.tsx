@@ -23,9 +23,18 @@ interface MessageBubbleProps {
   isStreaming?: boolean;
 }
 
+const SOURCE_ICONS: Record<string, string> = {
+  youtube: "\uD83C\uDFAC",
+  interview: "\uD83C\uDF99\uFE0F",
+  article: "\uD83D\uDCDD",
+  bio: "\uD83D\uDC64",
+  telegram: "\uD83D\uDCAC",
+};
+
 export function MessageBubble({ message, lang = "en", isStreaming = false }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [, tick] = useState(0);
   const t = UI_TEXT[lang];
   const [createdAt] = useState(() => Date.now());
@@ -49,6 +58,21 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
   const text = isUser
     ? rawText.replace(/^\[Respond in Uzbek \/ O'zbek tilida javob bering\]\n/, "")
     : rawText;
+
+  // Extract sources from source-url parts
+  const sources: { type: string; url: string; title: string }[] = [];
+  if (!isUser && message.parts) {
+    for (const part of message.parts) {
+      if (part.type === "source-url") {
+        const src = part as { type: "source-url"; sourceId: string; url?: string; title?: string };
+        sources.push({
+          type: src.sourceId,
+          url: typeof src.url === "string" ? src.url : "",
+          title: src.title || src.sourceId,
+        });
+      }
+    }
+  }
 
   const timestamp = timeAgo(new Date(createdAt));
 
@@ -168,45 +192,17 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                       {children}
                     </code>
                   ),
-                  a: ({ href, children }) => {
-                    // Detect citation links like [1], [2] — render as superscript badge
-                    const text =
-                      typeof children === "string"
-                        ? children
-                        : Array.isArray(children)
-                          ? children
-                              .filter((c): c is string => typeof c === "string")
-                              .join("")
-                          : "";
-                    const isCitation = /^\d{1,2}$/.test(text.trim());
-
-                    if (isCitation && href) {
-                      return (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-0.5 inline-flex h-[14px] min-w-[14px] items-center justify-center rounded-full text-[8px] font-bold leading-none no-underline align-super transition-opacity hover:opacity-70"
-                          style={{ background: "var(--input-focus)", color: "#fff" }}
-                          title={href}
-                        >
-                          {text.trim()}
-                        </a>
-                      );
-                    }
-
-                    return (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline underline-offset-2"
-                        style={{ color: "var(--input-focus)" }}
-                      >
-                        {children}
-                      </a>
-                    );
-                  },
+                  a: ({ href, children }) => (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2"
+                      style={{ color: "var(--input-focus)" }}
+                    >
+                      {children}
+                    </a>
+                  ),
                 }}
               >
                 {text}
@@ -221,6 +217,74 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
             </div>
           )}
 
+          {/* Expandable sources toggle */}
+          {sources.length > 0 && !isStreaming && (
+            <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => setSourcesOpen((o) => !o)}
+                className="flex w-full items-center gap-1.5 text-[11px] transition-opacity hover:opacity-80"
+                style={{ color: "var(--muted)" }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" style={{ opacity: 0.6 }}>
+                  <path fillRule="evenodd" d="M4.5 13a3.5 3.5 0 0 1-.41-6.97A4.5 4.5 0 0 1 8.5 2a4.5 4.5 0 0 1 4.41 4.03A3.5 3.5 0 0 1 11.5 13h-7Z" clipRule="evenodd" />
+                </svg>
+                {sources.length} {sources.length === 1 ? "source" : "sources"}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="h-3 w-3 transition-transform duration-200"
+                  style={{
+                    transform: sourcesOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    opacity: 0.5,
+                  }}
+                >
+                  <path fillRule="evenodd" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                </svg>
+              </button>
+              {sourcesOpen && (
+                <div className="mt-1.5 flex flex-col gap-1 animate-fade-in">
+                  {sources.map((s) => {
+                    const icon = SOURCE_ICONS[s.type] || "\uD83D\uDCC4";
+                    const isLink = s.url.startsWith("http");
+                    return isLink ? (
+                      <a
+                        key={s.type}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-colors"
+                        style={{ color: "var(--muted)", textDecoration: "none" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "var(--suggestion-hover)";
+                          e.currentTarget.style.color = "var(--foreground)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.color = "var(--muted)";
+                        }}
+                      >
+                        <span>{icon}</span>
+                        <span>{s.title}</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="ml-auto h-2.5 w-2.5" style={{ opacity: 0.4 }}>
+                          <path d="M6.22 8.72a.75.75 0 0 1 0-1.06l3.5-3.5a.75.75 0 1 1 1.06 1.06L7.81 8.25l2.97 2.97a.75.75 0 1 1-1.06 1.06l-3.5-3.5Z" />
+                        </svg>
+                      </a>
+                    ) : (
+                      <div
+                        key={s.type}
+                        className="flex items-center gap-2 px-2 py-1.5 text-[11px]"
+                        style={{ color: "var(--muted)" }}
+                      >
+                        <span>{icon}</span>
+                        <span>{s.title}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Timestamp + action buttons for AI messages */}
