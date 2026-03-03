@@ -210,19 +210,36 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
               className="mt-2 flex flex-wrap gap-1.5 border-t pt-2"
               style={{ borderColor: "var(--border)" }}
             >
-              {sources.map((s) => (
-                <span
-                  key={s.id}
-                  className="rounded-md px-1.5 py-0.5 text-[10px] font-medium"
-                  style={{
-                    background: "var(--suggestion-bg)",
-                    color: "var(--muted)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {s.title}
-                </span>
-              ))}
+              {sources.map((s) => {
+                const isLink = s.id.startsWith("http");
+                const Tag = isLink ? "a" : "span";
+                return (
+                  <Tag
+                    key={s.id}
+                    {...(isLink
+                      ? {
+                          href: s.id,
+                          target: "_blank",
+                          rel: "noopener noreferrer",
+                        }
+                      : {})}
+                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${isLink ? "cursor-pointer transition-opacity hover:opacity-70" : ""}`}
+                    style={{
+                      background: "var(--suggestion-bg)",
+                      color: "var(--muted)",
+                      border: "1px solid var(--border)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {s.title}
+                    {isLink && (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" className="ml-0.5 inline-block h-2 w-2" style={{ opacity: 0.5 }}>
+                        <path d="M3.5 1.5A1 1 0 0 0 2.5 2.5v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-3a.5.5 0 0 1 1 0v3a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3a.5.5 0 0 1 0 1h-3ZM7.5.5a.5.5 0 0 1 0-1h4a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-1 0V1.707L6.854 5.854a.5.5 0 1 1-.708-.708L10.293 1H7.5Z" />
+                      </svg>
+                    )}
+                  </Tag>
+                );
+              })}
             </div>
           )}
         </div>

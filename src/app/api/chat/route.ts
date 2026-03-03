@@ -203,21 +203,33 @@ export async function POST(req: Request) {
     context
   );
 
-  // Collect unique source types for citations
-  const sourceTypes = chunks?.length
-    ? [...new Set(chunks.map((c) => c.source_type))]
-    : [];
+  // Collect unique source URLs for citations
+  const uniqueSources: { url: string; type: string; title: string }[] = [];
+  if (chunks?.length) {
+    const seen = new Set<string>();
+    for (const c of chunks) {
+      const key = c.source_url || c.source_type;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueSources.push({
+          url: c.source_url || "",
+          type: c.source_type,
+          title: SOURCE_LABELS[c.source_type] || c.source_type,
+        });
+      }
+    }
+  }
 
   try {
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         // Write source citations as source-url parts
-        for (const st of sourceTypes) {
+        for (const src of uniqueSources) {
           writer.write({
             type: "source-url",
-            sourceId: st,
-            url: st,
-            title: SOURCE_LABELS[st] || st,
+            sourceId: src.url || src.type,
+            url: src.url || src.type,
+            title: src.title,
           });
         }
 

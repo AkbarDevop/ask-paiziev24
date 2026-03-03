@@ -38,6 +38,18 @@ export function ChatInterface() {
   const showFollowUps =
     !isLoading && messages.length > 0 && lastMessage?.role === "assistant";
 
+  // Check if streaming has started but no assistant text yet
+  const lastAssistantText =
+    lastMessage?.role === "assistant"
+      ? lastMessage.parts
+          ?.filter(
+            (p): p is Extract<typeof p, { type: "text" }> => p.type === "text"
+          )
+          .map((p) => p.text)
+          .join("") || ""
+      : "";
+  const isStreamingEmpty = status === "streaming" && lastAssistantText.length === 0;
+
   // Restore chat, language, and theme from localStorage on mount
   useEffect(() => {
     try {
@@ -82,10 +94,10 @@ export function ChatInterface() {
     localStorage.setItem("ask-akmal-lang", lang);
   }, [lang]);
 
-  // Only show thinking after a brief delay — if response streams fast, skip it entirely
+  // Show thinking indicator shortly after submission, hide once text appears
   useEffect(() => {
-    if (isWaiting) {
-      thinkingTimer.current = setTimeout(() => setShowThinking(true), 400);
+    if (isWaiting || isStreamingEmpty) {
+      thinkingTimer.current = setTimeout(() => setShowThinking(true), 150);
     } else {
       if (thinkingTimer.current) clearTimeout(thinkingTimer.current);
       setShowThinking(false);
@@ -93,7 +105,7 @@ export function ChatInterface() {
     return () => {
       if (thinkingTimer.current) clearTimeout(thinkingTimer.current);
     };
-  }, [isWaiting]);
+  }, [isWaiting, isStreamingEmpty]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -337,8 +349,8 @@ export function ChatInterface() {
             />
           ))}
 
-          {/* Thinking indicator — only shows if there's actual latency */}
-          {showThinking && messages[messages.length - 1]?.role === "user" && (
+          {/* Thinking indicator — shows while waiting for response */}
+          {showThinking && (
             <ThinkingIndicator lang={lang} />
           )}
 
