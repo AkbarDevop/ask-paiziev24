@@ -21,13 +21,13 @@ Ask it anything about startups, building companies in emerging markets, hiring, 
 ## How it works
 
 ```
-User question → Keyword extraction → Supabase vector search → Context retrieval → Gemini 2.5 Flash → Streamed response
+User question → Embed query (Gemini 768D) → pgvector similarity search → Top-K context → Gemini 2.5 Flash → Streamed response with source citations
 ```
 
-1. **Knowledge Base** — 860+ text chunks from 85+ sources ingested into Supabase (Postgres + pgvector + RLS)
-2. **Retrieval** — Relevant context is pulled via keyword search with safe parameterized queries
-3. **Generation** — Gemini 2.5 Flash generates a response grounded in retrieved context, speaking as Akmal
-4. **Streaming** — Response streams token-by-token for a real-time chat experience
+1. **Knowledge Base** — 860+ text chunks from 85+ sources ingested into Supabase with vector embeddings (Gemini `gemini-embedding-001`, 768D)
+2. **Retrieval** — Hybrid search: vector similarity (cosine distance via HNSW index) + keyword ILIKE fallback, merged and deduplicated
+3. **Generation** — Gemini 2.5 Flash generates a response grounded in retrieved context, speaking as Akmal, with inline source citations
+4. **Streaming** — Response streams token-by-token with source badges, timestamps, and a blinking cursor
 5. **Security** — Rate limiting, input validation, Row Level Security, no client-exposed keys
 
 ## Data Sources
@@ -46,36 +46,40 @@ User question → Keyword extraction → Supabase vector search → Context retr
 
 ## Tech Stack
 
-- **Framework** — [Next.js 16](https://nextjs.org) (App Router)
-- **AI** — [Vercel AI SDK v6](https://ai-sdk.dev) + [Gemini 2.5 Flash](https://ai.google.dev)
-- **Database** — [Supabase](https://supabase.com) (Postgres + pgvector + RLS)
-- **Styling** — [Tailwind CSS v4](https://tailwindcss.com) + CSS custom properties (light/dark auto)
-- **Deployment** — [Netlify](https://netlify.com)
-- **Language** — TypeScript
+| Layer | Technology |
+|-------|------------|
+| **Framework** | [Next.js 16](https://nextjs.org) (App Router, Turbopack) |
+| **AI / LLM** | [Vercel AI SDK v6](https://ai-sdk.dev) + [Gemini 2.5 Flash](https://ai.google.dev) |
+| **Embeddings** | Gemini `gemini-embedding-001` (768D, free tier) |
+| **Database** | [Supabase](https://supabase.com) (Postgres + pgvector + HNSW index + RLS) |
+| **Styling** | [Tailwind CSS v4](https://tailwindcss.com) + CSS custom properties |
+| **Deployment** | [Netlify](https://netlify.com) |
+| **Analytics** | [Plausible](https://plausible.io) (privacy-friendly) |
+| **Language** | TypeScript (strict) |
 
 ## Features
 
-- Bilingual UI (English / Uzbek toggle)
-- Real-time streaming responses with thinking indicator
-- Suggested questions with shuffle
-- Markdown rendering (lists, bold, links, code blocks, quotes)
-- Copy & Share buttons on AI responses
-- Auto-resizing textarea input
-- Light/dark mode (system preference)
-- Rate limiting (30 req/min per IP)
-- Input validation & sanitization (max 2000 chars, max 50 messages)
-- Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
-- Row Level Security on database (SELECT-only, no client-exposed keys)
-- Safe parameterized Supabase queries (no raw SQL)
-- Mobile-first responsive design with safe-area-inset support
+- **Semantic search** — Vector similarity via pgvector (768D Gemini embeddings) with keyword fallback
+- **Source citations** — AI responses show which source types were used (YouTube, Interview, Article, etc.)
+- **Bilingual UI** — Full English / Uzbek toggle (all UI text, not just prompts)
+- **88 suggested questions per language** — Randomized from a pool of 176 total, every refresh is different
+- **Real-time streaming** — Token-by-token with blinking cursor, thinking indicator, and timestamps
+- **PWA installable** — Add to home screen on mobile for app-like experience
+- **Dark/light mode** — Follows system preference
+- **Markdown rendering** — Lists, bold, links, code blocks, blockquotes
+- **Copy & Share** — Action buttons on AI responses
+- **Rate limiting** — 30 req/min per IP
+- **Input validation** — Max 2000 chars, max 50 messages per conversation
+- **Row Level Security** — SELECT-only, no client-exposed keys
+- **Mobile-first** — Responsive design with safe-area-inset support
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- Supabase project with `documents` table
-- Google AI API key (Gemini)
+- Supabase project with pgvector extension enabled
+- Google AI API key (Gemini — free tier works)
 
 ### Setup
 
@@ -91,13 +95,32 @@ Create `.env.local`:
 GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+```
+
+### Database setup
+
+Push the Supabase migrations to create the `documents` table, pgvector index, and `match_documents()` RPC:
+
+```bash
+npx supabase db push
 ```
 
 ### Ingest data
 
+Place your `.txt` files in `data/` (articles, bios) and `data/youtube/` (transcripts), then run:
+
 ```bash
-# Place .txt files in data/ and data/youtube/
 source <(grep -v '^#' .env.local | grep '=' | sed 's/^/export /') && npx tsx scripts/chunk-and-embed.ts
+```
+
+This chunks all files, generates Gemini embeddings, and inserts into Supabase.
+
+To backfill embeddings for existing rows with `embedding = NULL`:
+
+```bash
+source <(grep -v '^#' .env.local | grep '=' | sed 's/^/export /') && npx tsx scripts/backfill-embeddings.ts
 ```
 
 ### Run locally
@@ -108,32 +131,43 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
+### Deploy
+
+```bash
+npx netlify deploy --prod
+```
+
 ## Project Structure
 
 ```
 src/
 ├── app/
-│   ├── api/chat/route.ts    # Chat API with RAG pipeline
-│   ├── layout.tsx           # Root layout + OG metadata
+│   ├── api/chat/route.ts    # Chat API: vector search + keyword fallback + streaming with source citations
+│   ├── layout.tsx           # Root layout, OG metadata, PWA manifest, Plausible analytics
 │   └── page.tsx             # Home page
 ├── components/
-│   ├── ChatInterface.tsx    # Main chat UI
-│   ├── MessageBubble.tsx    # Message rendering + markdown
-│   ├── SuggestedQuestions.tsx
-│   ├── AkmalAvatar.tsx
-│   └── ThinkingIndicator.tsx
+│   ├── ChatInterface.tsx    # Main chat UI, language toggle, input, message list
+│   ├── MessageBubble.tsx    # Message rendering, markdown, source badges, timestamps, streaming cursor
+│   ├── SuggestedQuestions.tsx # Random question picker from 88-question pool
+│   ├── AkmalAvatar.tsx      # Avatar with hero section (bilingual)
+│   └── ThinkingIndicator.tsx # Animated thinking steps (bilingual)
 ├── lib/
-│   ├── prompts.ts           # System prompt + suggested questions
-│   ├── supabase.ts          # DB client
-│   └── embeddings.ts        # Embedding utilities
+│   ├── prompts.ts           # System prompt, 176 suggested questions (EN+UZ), UI translations
+│   ├── embeddings.ts        # Gemini embedding helpers (768D, getEmbedding/getEmbeddings)
+│   └── supabase.ts          # DB client (service role, not exposed to client)
 scripts/
-├── chunk-and-embed.ts       # Data ingestion (clears + re-inserts, scans data/ + data/youtube/)
-└── download-remaining-yt.py # YouTube transcript downloader (57 external channel videos)
+├── chunk-and-embed.ts       # Data ingestion: chunk → embed → insert (clears + re-inserts)
+├── backfill-embeddings.ts   # Backfill NULL embeddings in batches of 20
+└── download-remaining-yt.py # YouTube transcript downloader
 data/
 ├── *.txt                    # Articles, interviews, bios, LinkedIn, Telegram book
-└── youtube/*.txt            # 74 YouTube transcripts (auto-generated captions)
+└── youtube/*.txt            # 74 YouTube transcripts
 supabase/
-└── migrations/              # RLS, source type constraints, language support
+├── schema.sql               # Base schema with pgvector, HNSW index, match_documents() RPC
+└── migrations/              # RLS policies, language constraints, 768D embedding migration
+public/
+├── akmal.jpg                # Avatar image
+└── manifest.json            # PWA manifest
 ```
 
 ## License
