@@ -1,0 +1,18 @@
+{
+  "name": "Ask Akmal",
+  "short_name": "Ask Akmal",
+  "description": "AI clone of Akmal Paiziev — serial entrepreneur, founder of Express24, MyTaxi & Numeo.ai",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/akmal.jpg",
+      "sizes": "400x400",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { createUIMessageStreamResponse, createUIMessageStream, streamText } from "ai";
 import { google } from "@ai-sdk/google";
 import { getSupabase } from "@/lib/supabase";
 import { getEmbedding } from "@/lib/embeddings";
@@ -85,6 +85,15 @@ function extractKeywords(text: string): string[] {
     .filter((w) => w.length > 2 && w.length < 30 && !stopWords.has(w))
     .slice(0, 10); // cap at 10 keywords
 }
+
+// --- Source type labels ---
+const SOURCE_LABELS: Record<string, string> = {
+  youtube: "YouTube",
+  interview: "Interview",
+  article: "Article",
+  bio: "Bio",
+  telegram: "Telegram",
+};
 
 export async function POST(req: Request) {
   // --- Rate limiting ---
@@ -194,14 +203,35 @@ export async function POST(req: Request) {
     context
   );
 
+  // Collect unique source types for citations
+  const sourceTypes = chunks?.length
+    ? [...new Set(chunks.map((c) => c.source_type))]
+    : [];
+
   try {
-    const result = streamText({
-      model: google("gemini-2.5-flash"),
-      system: systemPrompt,
-      messages,
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Write source citations as source-url parts
+        for (const st of sourceTypes) {
+          writer.write({
+            type: "source-url",
+            sourceId: st,
+            url: st,
+            title: SOURCE_LABELS[st] || st,
+          });
+        }
+
+        const result = streamText({
+          model: google("gemini-2.5-flash"),
+          system: systemPrompt,
+          messages,
+        });
+
+        writer.merge(result.toUIMessageStream());
+      },
     });
 
-    return result.toUIMessageStreamResponse();
+    return createUIMessageStreamResponse({ stream });
   } catch (err) {
     console.error("LLM error:", err);
     return new Response(

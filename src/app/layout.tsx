@@ -40,6 +40,7 @@ export const metadata: Metadata = {
     icon: "/akmal.jpg",
     apple: "/akmal.jpg",
   },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -51,6 +52,15 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#0a0a0a" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="preload" href="/akmal.jpg" as="image" />
+        <script
+          defer
+          data-domain="askpaiziev24.netlify.app"
+          src="https://plausible.io/js/script.js"
+        />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         {children}

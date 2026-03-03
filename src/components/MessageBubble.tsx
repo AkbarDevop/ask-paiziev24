@@ -1,21 +1,40 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import ReactMarkdown from "react-markdown";
 import { AkmalAvatar } from "./AkmalAvatar";
 import type { Language } from "@/lib/prompts";
 import { UI_TEXT } from "@/lib/prompts";
 
+function timeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 interface MessageBubbleProps {
   message: UIMessage;
   lang?: Language;
+  isStreaming?: boolean;
 }
 
-export function MessageBubble({ message, lang = "en" }: MessageBubbleProps) {
+export function MessageBubble({ message, lang = "en", isStreaming = false }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const [, tick] = useState(0);
   const t = UI_TEXT[lang];
+  const [createdAt] = useState(() => Date.now());
+
+  // Re-render every 60s to update timestamps
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const rawText =
     message.parts
@@ -30,6 +49,19 @@ export function MessageBubble({ message, lang = "en" }: MessageBubbleProps) {
   const text = isUser
     ? rawText.replace(/^\[Respond in Uzbek \/ O'zbek tilida javob bering\]\n/, "")
     : rawText;
+
+  // Extract source citations from source-url parts
+  const sources: { id: string; title: string }[] = [];
+  if (!isUser && message.parts) {
+    for (const part of message.parts) {
+      if (part.type === "source-url") {
+        const src = part as { type: "source-url"; sourceId: string; title?: string };
+        sources.push({ id: src.sourceId, title: src.title || src.sourceId });
+      }
+    }
+  }
+
+  const timestamp = timeAgo(new Date(createdAt));
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(text);
@@ -162,60 +194,97 @@ export function MessageBubble({ message, lang = "en" }: MessageBubbleProps) {
               >
                 {text}
               </ReactMarkdown>
+              {/* Streaming cursor */}
+              {isStreaming && (
+                <span
+                  className="ml-0.5 inline-block h-4 w-[2px] animate-pulse align-middle"
+                  style={{ background: "var(--ai-text)", opacity: 0.7 }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Source citations */}
+          {sources.length > 0 && !isStreaming && (
+            <div
+              className="mt-2 flex flex-wrap gap-1.5 border-t pt-2"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {sources.map((s) => (
+                <span
+                  key={s.id}
+                  className="rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+                  style={{
+                    background: "var(--suggestion-bg)",
+                    color: "var(--muted)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {s.title}
+                </span>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Action buttons for AI messages */}
-        {!isUser && (
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
-              style={{ color: "var(--muted)" }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "var(--suggestion-hover)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "transparent")
-              }
-            >
-              {copied ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                    <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
-                  </svg>
-                  {t.copied}
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                    <path d="M5.5 3.5A1.5 1.5 0 0 1 7 2h2.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 1 .439 1.061V9.5A1.5 1.5 0 0 1 12 11V8.621a3 3 0 0 0-.879-2.121L9 4.379A3 3 0 0 0 6.879 3.5H5.5Z" />
-                    <path d="M4 5a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 4 14h5a1.5 1.5 0 0 0 1.5-1.5V8.621a1.5 1.5 0 0 0-.44-1.06L7.94 5.439A1.5 1.5 0 0 0 6.878 5H4Z" />
-                  </svg>
-                  {t.copy}
-                </>
-              )}
-            </button>
-            <button
-              onClick={handleShare}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
-              style={{ color: "var(--muted)" }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "var(--suggestion-hover)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "transparent")
-              }
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                <path d="M12 2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9.414l-1-1H12V3H4v2h1.586l-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h8Z" />
-                <path d="M5.354 9.354a.5.5 0 0 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 7.207V14a.5.5 0 0 1-1 0V7.207L5.354 9.354Z" />
-              </svg>
-              {t.share}
-            </button>
-          </div>
-        )}
+        {/* Timestamp + action buttons for AI messages */}
+        <div className={`flex items-center gap-1.5 ${isUser ? "justify-end" : ""}`}>
+          <span
+            className="text-[10px]"
+            style={{ color: "var(--muted)", opacity: 0.5 }}
+          >
+            {timestamp}
+          </span>
+          {!isUser && (
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
+                style={{ color: "var(--muted)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "var(--suggestion-hover)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                {copied ? (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                      <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+                    </svg>
+                    {t.copied}
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                      <path d="M5.5 3.5A1.5 1.5 0 0 1 7 2h2.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 1 .439 1.061V9.5A1.5 1.5 0 0 1 12 11V8.621a3 3 0 0 0-.879-2.121L9 4.379A3 3 0 0 0 6.879 3.5H5.5Z" />
+                      <path d="M4 5a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 4 14h5a1.5 1.5 0 0 0 1.5-1.5V8.621a1.5 1.5 0 0 0-.44-1.06L7.94 5.439A1.5 1.5 0 0 0 6.878 5H4Z" />
+                    </svg>
+                    {t.copy}
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleShare}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
+                style={{ color: "var(--muted)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "var(--suggestion-hover)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                  <path d="M12 2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9.414l-1-1H12V3H4v2h1.586l-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h8Z" />
+                  <path d="M5.354 9.354a.5.5 0 0 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 7.207V14a.5.5 0 0 1-1 0V7.207L5.354 9.354Z" />
+                </svg>
+                {t.share}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
