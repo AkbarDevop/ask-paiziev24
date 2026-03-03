@@ -23,13 +23,53 @@ interface MessageBubbleProps {
   isStreaming?: boolean;
 }
 
-const SOURCE_ICONS: Record<string, string> = {
-  youtube: "\uD83C\uDFAC",
-  interview: "\uD83C\uDF99\uFE0F",
-  article: "\uD83D\uDCDD",
-  bio: "\uD83D\uDC64",
-  telegram: "\uD83D\uDCAC",
-};
+// SVG logo icons for source types
+function SourceIcon({ type }: { type: string }) {
+  const cls = "h-4 w-4 shrink-0";
+  switch (type) {
+    case "youtube":
+      return (
+        <svg viewBox="0 0 24 24" className={cls} style={{ color: "#FF0000" }}>
+          <path fill="currentColor" d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.38.55A3.02 3.02 0 0 0 .5 6.19 31.6 31.6 0 0 0 0 12a31.6 31.6 0 0 0 .5 5.81 3.02 3.02 0 0 0 2.12 2.14c1.88.55 9.38.55 9.38.55s7.5 0 9.38-.55a3.02 3.02 0 0 0 2.12-2.14A31.6 31.6 0 0 0 24 12a31.6 31.6 0 0 0-.5-5.81ZM9.75 15.02V8.98L15.5 12l-5.75 3.02Z" />
+        </svg>
+      );
+    case "telegram":
+      return (
+        <svg viewBox="0 0 24 24" className={cls} style={{ color: "#26A5E4" }}>
+          <path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0Zm5.53 8.15-1.83 8.63c-.14.61-.5.76-.99.47l-2.76-2.03-1.33 1.28c-.15.15-.27.27-.56.27l.2-2.81 5.1-4.61c.22-.2-.05-.31-.34-.12l-6.31 3.97-2.72-.85c-.59-.18-.6-.59.12-.88l10.63-4.1c.49-.18.93.12.77.88Z" />
+        </svg>
+      );
+    case "interview":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={cls} style={{ color: "var(--muted)" }}>
+          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M19.5 10V7a2 2 0 0 0-2-2h-2l-1.5-2h-4L8.5 5h-2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M21 4v4M23 6h-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
+    case "article":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={cls} style={{ color: "var(--muted)" }}>
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M7 8h10M7 12h10M7 16h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
+    case "bio":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={cls} style={{ color: "var(--muted)" }}>
+          <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M5 20c0-3.31 3.13-6 7-6s7 2.69 7 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={cls} style={{ color: "var(--muted)" }}>
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M7 8h10M7 12h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
+  }
+}
 
 export function MessageBubble({ message, lang = "en", isStreaming = false }: MessageBubbleProps) {
   const isUser = message.role === "user";
@@ -184,6 +224,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                       {children}
                     </blockquote>
                   ),
+                  hr: () => null,
                   code: ({ children }) => (
                     <code
                       className="rounded px-1 py-0.5 text-[13px]"
@@ -245,7 +286,6 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
               {sourcesOpen && (
                 <div className="mt-1.5 flex flex-col gap-1 animate-fade-in">
                   {sources.map((s) => {
-                    const icon = SOURCE_ICONS[s.type] || "\uD83D\uDCC4";
                     const isLink = s.url.startsWith("http");
                     return isLink ? (
                       <a
@@ -264,7 +304,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                           e.currentTarget.style.color = "var(--muted)";
                         }}
                       >
-                        <span>{icon}</span>
+                        <SourceIcon type={s.type} />
                         <span>{s.title}</span>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="ml-auto h-2.5 w-2.5" style={{ opacity: 0.4 }}>
                           <path d="M6.22 8.72a.75.75 0 0 1 0-1.06l3.5-3.5a.75.75 0 1 1 1.06 1.06L7.81 8.25l2.97 2.97a.75.75 0 1 1-1.06 1.06l-3.5-3.5Z" />
@@ -276,7 +316,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                         className="flex items-center gap-2 px-2 py-1.5 text-[11px]"
                         style={{ color: "var(--muted)" }}
                       >
-                        <span>{icon}</span>
+                        <SourceIcon type={s.type} />
                         <span>{s.title}</span>
                       </div>
                     );
