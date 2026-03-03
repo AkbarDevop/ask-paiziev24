@@ -79,7 +79,12 @@ async function main() {
         `Batch ${batchNum}/${totalBatches} done (${Math.min(i + BATCH_SIZE, rows.length)}/${rows.length})`
       );
     } catch (err) {
-      console.error(`  Embedding API error on batch starting at index ${i}:`, err);
+      const msg = String(err);
+      if (msg.includes("quota") || msg.includes("rate") || msg.includes("429")) {
+        console.log(`\n  Quota/rate limit hit after ${updated} embeddings. Run again later.`);
+        break;
+      }
+      console.error(`  Embedding API error on batch ${i}:`, msg.slice(0, 200));
     }
 
     // Delay to stay within Gemini free tier rate limit
