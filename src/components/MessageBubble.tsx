@@ -50,17 +50,6 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
     ? rawText.replace(/^\[Respond in Uzbek \/ O'zbek tilida javob bering\]\n/, "")
     : rawText;
 
-  // Extract source citations from source-url parts
-  const sources: { id: string; title: string }[] = [];
-  if (!isUser && message.parts) {
-    for (const part of message.parts) {
-      if (part.type === "source-url") {
-        const src = part as { type: "source-url"; sourceId: string; title?: string };
-        sources.push({ id: src.sourceId, title: src.title || src.sourceId });
-      }
-    }
-  }
-
   const timestamp = timeAgo(new Date(createdAt));
 
   const handleCopy = useCallback(async () => {
@@ -179,17 +168,45 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                       {children}
                     </code>
                   ),
-                  a: ({ href, children }) => (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline underline-offset-2"
-                      style={{ color: "var(--input-focus)" }}
-                    >
-                      {children}
-                    </a>
-                  ),
+                  a: ({ href, children }) => {
+                    // Detect citation links like [1], [2] — render as superscript badge
+                    const text =
+                      typeof children === "string"
+                        ? children
+                        : Array.isArray(children)
+                          ? children
+                              .filter((c): c is string => typeof c === "string")
+                              .join("")
+                          : "";
+                    const isCitation = /^\d{1,2}$/.test(text.trim());
+
+                    if (isCitation && href) {
+                      return (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-0.5 inline-flex h-[14px] min-w-[14px] items-center justify-center rounded-full text-[8px] font-bold leading-none no-underline align-super transition-opacity hover:opacity-70"
+                          style={{ background: "var(--input-focus)", color: "#fff" }}
+                          title={href}
+                        >
+                          {text.trim()}
+                        </a>
+                      );
+                    }
+
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2"
+                        style={{ color: "var(--input-focus)" }}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
                 }}
               >
                 {text}
@@ -204,44 +221,6 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
             </div>
           )}
 
-          {/* Source citations */}
-          {sources.length > 0 && !isStreaming && (
-            <div
-              className="mt-2 flex flex-wrap gap-1.5 border-t pt-2"
-              style={{ borderColor: "var(--border)" }}
-            >
-              {sources.map((s) => {
-                const isLink = s.id.startsWith("http");
-                const Tag = isLink ? "a" : "span";
-                return (
-                  <Tag
-                    key={s.id}
-                    {...(isLink
-                      ? {
-                          href: s.id,
-                          target: "_blank",
-                          rel: "noopener noreferrer",
-                        }
-                      : {})}
-                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${isLink ? "cursor-pointer transition-opacity hover:opacity-70" : ""}`}
-                    style={{
-                      background: "var(--suggestion-bg)",
-                      color: "var(--muted)",
-                      border: "1px solid var(--border)",
-                      textDecoration: "none",
-                    }}
-                  >
-                    {s.title}
-                    {isLink && (
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" className="ml-0.5 inline-block h-2 w-2" style={{ opacity: 0.5 }}>
-                        <path d="M3.5 1.5A1 1 0 0 0 2.5 2.5v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-3a.5.5 0 0 1 1 0v3a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3a.5.5 0 0 1 0 1h-3ZM7.5.5a.5.5 0 0 1 0-1h4a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-1 0V1.707L6.854 5.854a.5.5 0 1 1-.708-.708L10.293 1H7.5Z" />
-                      </svg>
-                    )}
-                  </Tag>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         {/* Timestamp + action buttons for AI messages */}

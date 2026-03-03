@@ -188,51 +188,50 @@ export async function POST(req: Request) {
     }
   }
 
-  // --- Build context ---
-  const context = chunks?.length
-    ? chunks
+  // --- Number unique sources for inline citations ---
+  const sourceMap = new Map<string, number>();
+  const sourceList: { num: number; type: string; url: string }[] = [];
+  if (chunks?.length) {
+    for (const c of chunks) {
+      const key = c.source_url || c.source_type;
+      if (!sourceMap.has(key)) {
+        const num = sourceMap.size + 1;
+        sourceMap.set(key, num);
+        sourceList.push({ num, type: c.source_type, url: c.source_url });
+      }
+    }
+  }
+
+  // --- Build context with numbered sources ---
+  let context = "No relevant context found.";
+  if (chunks?.length) {
+    context = chunks
+      .map((c) => {
+        const key = c.source_url || c.source_type;
+        const num = sourceMap.get(key);
+        return `[Source ${num}: ${c.source_type}]\n${c.content}`;
+      })
+      .join("\n\n---\n\n");
+
+    // Append source reference list for citations
+    context +=
+      "\n\n---\n\nSOURCE REFERENCE:\n" +
+      sourceList
         .map(
-          (c: { source_type: string; source_url: string; content: string }) =>
-            `[Source: ${c.source_type}${c.source_url ? ` — ${c.source_url}` : ""}]\n${c.content}`
+          (s) =>
+            `[${s.num}] ${SOURCE_LABELS[s.type] || s.type}${s.url ? ` — ${s.url}` : ""}`
         )
-        .join("\n\n---\n\n")
-    : "No relevant context found.";
+        .join("\n");
+  }
 
   const systemPrompt = AKMAL_SYSTEM_PROMPT.replace(
     "{retrieved_context}",
     context
   );
 
-  // Collect unique source URLs for citations
-  const uniqueSources: { url: string; type: string; title: string }[] = [];
-  if (chunks?.length) {
-    const seen = new Set<string>();
-    for (const c of chunks) {
-      const key = c.source_url || c.source_type;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueSources.push({
-          url: c.source_url || "",
-          type: c.source_type,
-          title: SOURCE_LABELS[c.source_type] || c.source_type,
-        });
-      }
-    }
-  }
-
   try {
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        // Write source citations as source-url parts
-        for (const src of uniqueSources) {
-          writer.write({
-            type: "source-url",
-            sourceId: src.url || src.type,
-            url: src.url || src.type,
-            title: src.title,
-          });
-        }
-
         const result = streamText({
           model: google("gemini-2.5-flash"),
           system: systemPrompt,
