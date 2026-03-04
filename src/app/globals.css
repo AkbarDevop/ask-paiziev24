@@ -136,4 +136,15 @@ body {
   animation: spin 0.8s linear infinite;
 }
 
+/* Mobile touch optimizations */
+button,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
 
+/* Prevent code overflow on small screens */
+code {
+  word-break: break-word;
+}

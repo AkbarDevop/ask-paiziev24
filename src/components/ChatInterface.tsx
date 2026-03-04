@@ -244,7 +244,7 @@ export function ChatInterface() {
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors sm:h-8 sm:w-8"
               style={{ color: "var(--muted)", border: "1px solid var(--border)" }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = "var(--suggestion-hover)";
@@ -274,7 +274,7 @@ export function ChatInterface() {
             >
               <button
                 onClick={() => setLang("en")}
-                className="px-2.5 py-1.5 transition-colors"
+                className="min-h-[36px] px-2.5 py-1.5 transition-colors"
                 style={{
                   background:
                     lang === "en" ? "var(--user-bubble)" : "transparent",
@@ -286,7 +286,7 @@ export function ChatInterface() {
               </button>
               <button
                 onClick={() => setLang("uz")}
-                className="px-2.5 py-1.5 transition-colors"
+                className="min-h-[36px] px-2.5 py-1.5 transition-colors"
                 style={{
                   background:
                     lang === "uz" ? "var(--user-bubble)" : "transparent",
@@ -300,7 +300,7 @@ export function ChatInterface() {
             {messages.length > 0 && (
               <button
                 onClick={handleNewChat}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                className="flex min-h-[36px] items-center justify-center rounded-lg px-2 py-1.5 text-xs font-medium transition-colors sm:px-3"
                 style={{
                   color: "var(--muted)",
                   border: "1px solid var(--border)",
@@ -313,8 +313,12 @@ export function ChatInterface() {
                   e.currentTarget.style.background = "transparent";
                   e.currentTarget.style.color = "var(--muted)";
                 }}
+                aria-label={t.newChat}
               >
-                {t.newChat}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5 sm:mr-1.5">
+                  <path d="M3.75 2a.75.75 0 0 0-.75.75v10.5a.75.75 0 0 0 1.28.53L8 10.06l3.72 3.72a.75.75 0 0 0 1.28-.53V2.75A.75.75 0 0 0 12.25 2h-8.5ZM8 3.5a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 0-1.5h1.5v-1.5A.75.75 0 0 1 8 3.5Z" />
+                </svg>
+                <span className="hidden sm:inline">{t.newChat}</span>
               </button>
             )}
           </div>
@@ -326,7 +330,7 @@ export function ChatInterface() {
         <div className="mx-auto max-w-2xl space-y-5">
           {/* Hero */}
           {messages.length === 0 && (
-            <div className="hero-glow flex flex-col items-center gap-8 pt-8 sm:gap-10 sm:pt-12">
+            <div className="hero-glow flex flex-col items-center gap-6 pt-6 sm:gap-10 sm:pt-12">
               <AkmalAvatar size="lg" lang={lang} />
               <SuggestedQuestions onSelect={handleSuggestedQuestion} lang={lang} />
               <p className="text-xs" style={{ color: "var(--muted)" }}>
@@ -371,7 +375,7 @@ export function ChatInterface() {
                 <p style={{ opacity: 0.8 }}>{getErrorMessage(error)}</p>
                 <button
                   onClick={handleRetry}
-                  className="flex w-fit items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                  className="flex w-fit items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors sm:px-3 sm:py-1.5 sm:text-xs"
                   style={{
                     color: "var(--input-focus)",
                     border: "1px solid var(--border)",
@@ -406,7 +410,7 @@ export function ChatInterface() {
       {showScrollBtn && (
         <button
           onClick={scrollToBottom}
-          className="fixed bottom-24 right-4 z-20 flex h-9 w-9 items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 active:scale-95 animate-fade-in sm:bottom-28"
+          className="fixed bottom-20 right-4 z-20 flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 active:scale-95 animate-fade-in sm:bottom-28 sm:h-9 sm:w-9"
           style={{
             background: "var(--ai-bubble)",
             border: "1px solid var(--border)",
@@ -440,7 +444,7 @@ export function ChatInterface() {
               onKeyDown={handleKeyDown}
               placeholder={t.placeholder}
               rows={1}
-              className="w-full resize-none rounded-xl px-3 py-2.5 text-[14px] outline-none transition-all sm:px-4 sm:py-3 sm:text-sm"
+              className="w-full resize-none rounded-xl px-3 py-2.5 text-base outline-none transition-all sm:px-4 sm:py-3 sm:text-[14px]"
               style={{
                 background: "var(--input-bg)",
                 color: "var(--foreground)",
@@ -496,18 +500,6 @@ export function ChatInterface() {
           >
             Built by akbar.one
           </a>
-          <span
-            className="hidden text-[11px] sm:inline"
-            style={{ color: "var(--muted)", opacity: 0.3 }}
-          >
-            &middot;
-          </span>
-          <p
-            className="hidden text-[11px] sm:block"
-            style={{ color: "var(--muted)", opacity: 0.4 }}
-          >
-            {t.inputHint}
-          </p>
         </div>
       </div>
     </div>

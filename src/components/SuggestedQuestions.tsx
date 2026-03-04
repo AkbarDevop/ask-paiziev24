@@ -23,12 +23,12 @@ export function SuggestedQuestions({ onSelect, lang }: SuggestedQuestionsProps) 
 
   return (
     <div className="flex w-full max-w-lg flex-col items-center gap-3">
-      <div className="grid w-full gap-2 sm:grid-cols-2">
+      <div className="grid w-full grid-cols-2 gap-2">
         {questions.map((question) => (
           <button
             key={question}
             onClick={() => onSelect(question)}
-            className="rounded-xl px-3.5 py-2.5 text-left text-[12px] leading-snug transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
+            className="rounded-xl px-3.5 py-3 text-left text-[13px] leading-snug transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm active:scale-[0.97] sm:px-4 sm:py-3 sm:text-[13px]"
             style={{
               background: "var(--suggestion-bg)",
               color: "var(--muted)",

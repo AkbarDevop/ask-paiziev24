@@ -155,7 +155,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
         </div>
       )}
 
-      <div className="flex max-w-[88%] flex-col gap-1 sm:max-w-[80%]">
+      <div className="flex max-w-[92%] flex-col gap-1 sm:max-w-[80%]">
         <div
           className={`rounded-2xl px-4 py-3 text-[14px] leading-relaxed ${isUser ? "rounded-tr-sm" : "rounded-tl-sm"}`}
           style={
@@ -256,7 +256,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
             <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
               <button
                 onClick={() => setSourcesOpen((o) => !o)}
-                className="flex w-full items-center gap-1.5 text-[11px] transition-opacity hover:opacity-80"
+                className="flex w-full items-center gap-1.5 py-1 text-xs transition-opacity hover:opacity-80 sm:py-0 sm:text-[11px]"
                 style={{ color: "var(--muted)" }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" style={{ opacity: 0.6 }}>
@@ -286,7 +286,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                         href={s.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-colors"
+                        className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs transition-colors sm:py-1.5 sm:text-[11px]"
                         style={{ color: "var(--muted)", textDecoration: "none" }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.background = "var(--suggestion-hover)";
@@ -323,13 +323,13 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
         {/* Timestamp + action buttons for AI messages */}
         <div className={`flex items-center gap-1.5 ${isUser ? "justify-end" : ""}`}>
           <span
-            className="text-[10px]"
+            className="text-[11px] sm:text-[10px]"
             style={{ color: "var(--muted)", opacity: 0.5 }}
           >
             {timestamp}
           </span>
           {!isUser && (
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="flex items-center gap-1 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
               <button
                 onClick={handleCopy}
                 className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
