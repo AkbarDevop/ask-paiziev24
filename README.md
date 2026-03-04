@@ -24,7 +24,7 @@ Ask it anything about startups, building companies in emerging markets, hiring, 
 User question → Embed query (Gemini 768D) → pgvector similarity search → Top-K context → Gemini 2.5 Flash → Streamed response with source citations
 ```
 
-1. **Knowledge Base** — 860+ text chunks from 85+ sources ingested into Supabase with vector embeddings (Gemini `gemini-embedding-001`, 768D)
+1. **Knowledge Base** — 966 text chunks from 97+ sources ingested into Supabase with vector embeddings (Gemini `gemini-embedding-001`, 768D) — 100% embedding coverage
 2. **Retrieval** — Hybrid search: vector similarity (cosine distance via HNSW index) + keyword ILIKE fallback, merged and deduplicated
 3. **Generation** — Gemini 2.5 Flash generates a response grounded in retrieved context, speaking as Akmal, with inline source citations
 4. **Streaming** — Response streams token-by-token with source badges, timestamps, and a blinking cursor
@@ -34,15 +34,15 @@ User question → Embed query (Gemini 768D) → pgvector similarity search → T
 
 | Source | Count | Description |
 |--------|-------|-------------|
-| YouTube transcripts | 74 videos | Startup Maktabi series, podcasts (CACTUZ, AVLO, SEREDIN, Fikr yetakchilari, BUSOQQA, CHOYXONA), interviews on 25+ channels, panels & talks |
+| YouTube transcripts | 89 videos | Startup Maktabi series, podcasts (CACTUZ, AVLO, SEREDIN, Fikr yetakchilari, BUSOQQA, CHOYXONA), interviews on 25+ channels, panels & talks |
 | Telegram book | 114 chapters | *"From Tashkent to Silicon Valley"* |
-| Articles | 5 | Euronews, Tribune, Kapital.uz, DigitalBusiness.kz, Numeo.ai |
-| LinkedIn | 1 | Profile, posts, about section, Numeo description |
-| Interviews | 1 | The Tech interview |
+| Articles | 7 | Euronews, Tribune, Kapital.uz, DigitalBusiness.kz, Numeo.ai, and more |
+| LinkedIn | 2 | Profile, posts, about section, Numeo description |
+| Interviews | 4 | The Tech, and others |
 | Bios | 2 | Startup Grind, Outsource |
 
-**Total:** 861 chunks across 85+ source files
-**Languages:** English, Uzbek, Russian
+**Total:** 966 chunks across 97+ source files — all with 768D vector embeddings (100% coverage)
+**Languages:** Uzbek (580 chunks), Russian (196), English (175)
 
 ## Tech Stack
 
@@ -59,7 +59,7 @@ User question → Embed query (Gemini 768D) → pgvector similarity search → T
 
 ## Features
 
-- **Semantic search** — Vector similarity via pgvector (768D Gemini embeddings) with keyword fallback
+- **Semantic search** — Vector similarity via pgvector (768D Gemini embeddings, 100% coverage) with keyword fallback — understands meaning, not just keywords
 - **Source citations** — AI responses show which source types were used (YouTube, Interview, Article, etc.)
 - **Bilingual UI** — Full English / Uzbek toggle (all UI text, not just prompts)
 - **88 suggested questions per language** — Randomized from a pool of 176 total, every refresh is different
@@ -161,7 +161,7 @@ scripts/
 └── download-remaining-yt.py # YouTube transcript downloader
 data/
 ├── *.txt                    # Articles, interviews, bios, LinkedIn, Telegram book
-└── youtube/*.txt            # 74 YouTube transcripts
+└── youtube/*.txt            # 89 YouTube transcripts
 supabase/
 ├── schema.sql               # Base schema with pgvector, HNSW index, match_documents() RPC
 └── migrations/              # RLS policies, language constraints, 768D embedding migration
