@@ -482,6 +482,21 @@ export function ChatInterface() {
             {t.disclaimer}
           </p>
           <span
+            className="text-[10px] sm:text-[11px]"
+            style={{ color: "var(--muted)", opacity: 0.3 }}
+          >
+            &middot;
+          </span>
+          <a
+            href="https://akbar.one"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] sm:text-[11px] transition-opacity hover:opacity-80"
+            style={{ color: "var(--muted)", opacity: 0.5 }}
+          >
+            Built by akbar.one
+          </a>
+          <span
             className="hidden text-[11px] sm:inline"
             style={{ color: "var(--muted)", opacity: 0.3 }}
           >

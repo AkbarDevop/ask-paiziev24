@@ -178,6 +178,6 @@ MIT
 
 <div align="center">
 
-Built by [Akbar](https://github.com/AkbarDevop)
+Built by [Akbar](https://akbar.one)
 
 </div>
