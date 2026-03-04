@@ -248,13 +248,6 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
               >
                 {text}
               </ReactMarkdown>
-              {/* Streaming cursor */}
-              {isStreaming && (
-                <span
-                  className="ml-0.5 inline-block h-4 w-[2px] animate-pulse align-middle"
-                  style={{ background: "var(--ai-text)", opacity: 0.7 }}
-                />
-              )}
             </div>
           )}
 
