@@ -209,9 +209,13 @@ export async function POST(req: Request) {
     for (const c of chunks) {
       if (!seen.has(c.source_type)) {
         seen.add(c.source_type);
+        let url = c.source_url || "";
+        if (c.source_type === "telegram" && !url.startsWith("http")) {
+          url = "https://t.me/paiziev24";
+        }
         uniqueSources.push({
           type: c.source_type,
-          url: c.source_url || "",
+          url,
           title: SOURCE_LABELS[c.source_type] || c.source_type,
         });
       }
