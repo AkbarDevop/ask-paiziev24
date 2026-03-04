@@ -108,7 +108,12 @@ export function ChatInterface() {
   }, [isWaiting, isStreamingEmpty]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll the chat container to bottom instead of scrollIntoView
+    // to avoid the first message being hidden behind the sticky header
+    const el = chatAreaRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, [messages]);
 
   // Scroll-to-bottom button visibility
