@@ -30,7 +30,7 @@ function pushAnalyticsEvent(event: string, payload: AnalyticsPayload = {}) {
 
 export function ChatInterface() {
   const [lang, setLang] = useState<Language>("en");
-  const { messages, sendMessage, setMessages, status, error } = useChat();
+  const { messages, sendMessage, regenerate, setMessages, status, error } = useChat();
   const [input, setInput] = useState("");
   const [lastFailedInput, setLastFailedInput] = useState("");
   const [showThinking, setShowThinking] = useState(false);
@@ -45,7 +45,7 @@ export function ChatInterface() {
   const sessionStartMsRef = useRef(Date.now());
   const responseStartMsRef = useRef<number | null>(null);
   const responseTrackedRef = useRef(false);
-  const lastPromptSourceRef = useRef<"typed" | "suggested" | "retry">("typed");
+  const lastPromptSourceRef = useRef<"typed" | "suggested" | "retry" | "change_response">("typed");
   const seenScrollDepthRef = useRef<Set<number>>(new Set());
   const engagementTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const latestLangRef = useRef<Language>(lang);
@@ -152,14 +152,33 @@ export function ChatInterface() {
     };
   }, [isWaiting, isStreamingEmpty]);
 
+  const trackScrollDepth = useCallback(() => {
+    const el = chatAreaRef.current;
+    if (!el) return;
+    const maxScrollable = el.scrollHeight - el.clientHeight;
+    if (maxScrollable <= 0) return;
+    const scrollPercent = Math.round((el.scrollTop / maxScrollable) * 100);
+    [25, 50, 75, 90].forEach((threshold) => {
+      if (scrollPercent >= threshold && !seenScrollDepthRef.current.has(threshold)) {
+        seenScrollDepthRef.current.add(threshold);
+        pushAnalyticsEvent("askpaiziev_scroll_depth", {
+          scroll_percent: threshold,
+          language: latestLangRef.current,
+          message_count: latestMessageCountRef.current,
+        });
+      }
+    });
+  }, []);
+
   useEffect(() => {
     // Scroll the chat container to bottom instead of scrollIntoView
     // to avoid the first message being hidden behind the sticky header
     const el = chatAreaRef.current;
-    if (el) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    }
-  }, [messages]);
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    requestAnimationFrame(trackScrollDepth);
+    setTimeout(trackScrollDepth, 220);
+  }, [messages, trackScrollDepth]);
 
   // Scroll-to-bottom button visibility
   useEffect(() => {
@@ -168,23 +187,12 @@ export function ChatInterface() {
     const handleScroll = () => {
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       setShowScrollBtn(distanceFromBottom > 120);
-      const maxScrollable = el.scrollHeight - el.clientHeight;
-      if (maxScrollable <= 0) return;
-      const scrollPercent = Math.round((el.scrollTop / maxScrollable) * 100);
-      [25, 50, 75, 90].forEach((threshold) => {
-        if (scrollPercent >= threshold && !seenScrollDepthRef.current.has(threshold)) {
-          seenScrollDepthRef.current.add(threshold);
-          pushAnalyticsEvent("askpaiziev_scroll_depth", {
-            scroll_percent: threshold,
-            language: latestLangRef.current,
-            message_count: latestMessageCountRef.current,
-          });
-        }
-      });
+      trackScrollDepth();
     };
     el.addEventListener("scroll", handleScroll, { passive: true });
+    requestAnimationFrame(handleScroll);
     return () => el.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [trackScrollDepth]);
 
   // Engagement checkpoints to segment how long users stay in a session.
   useEffect(() => {
@@ -276,6 +284,20 @@ export function ChatInterface() {
         sendMessage({ text: retryText });
       }, 100);
     }
+  };
+
+  const handleChangeResponse = () => {
+    if (isLoading || messages.length === 0) return;
+    const hasAssistantMessage = messages.some((message) => message.role === "assistant");
+    if (!hasAssistantMessage) return;
+    lastPromptSourceRef.current = "change_response";
+    responseStartMsRef.current = performance.now();
+    responseTrackedRef.current = false;
+    pushAnalyticsEvent("askpaiziev_change_response_click", {
+      language: lang,
+      message_count: messages.length,
+    });
+    regenerate();
   };
 
   const getErrorMessage = (err: Error) => {
@@ -575,7 +597,29 @@ export function ChatInterface() {
 
           {/* Follow-up suggestion chips */}
           {showFollowUps && (
-            <FollowUpChips onSelect={handleSuggestedQuestion} lang={lang} />
+            <>
+              <FollowUpChips onSelect={handleSuggestedQuestion} lang={lang} />
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={handleChangeResponse}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    color: "var(--muted)",
+                    border: "1px solid var(--border)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--suggestion-hover)";
+                    e.currentTarget.style.color = "var(--foreground)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = "var(--muted)";
+                  }}
+                >
+                  {lang === "uz" ? "Javobni o'zgartirish" : "Change response"}
+                </button>
+              </div>
+            </>
           )}
 
           <div ref={messagesEndRef} />
