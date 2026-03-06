@@ -42,6 +42,14 @@ export function ChatInterface() {
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
   const hadAssistantResponseRef = useRef(false);
+  const sessionStartMsRef = useRef(Date.now());
+  const responseStartMsRef = useRef<number | null>(null);
+  const responseTrackedRef = useRef(false);
+  const lastPromptSourceRef = useRef<"typed" | "suggested" | "retry">("typed");
+  const seenScrollDepthRef = useRef<Set<number>>(new Set());
+  const engagementTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const latestLangRef = useRef<Language>(lang);
+  const latestMessageCountRef = useRef(messages.length);
 
   const t = UI_TEXT[lang];
   const isLoading = status === "streaming" || status === "submitted";
@@ -61,6 +69,14 @@ export function ChatInterface() {
           .join("") || ""
       : "";
   const isStreamingEmpty = status === "streaming" && lastAssistantText.length === 0;
+
+  useEffect(() => {
+    latestLangRef.current = lang;
+  }, [lang]);
+
+  useEffect(() => {
+    latestMessageCountRef.current = messages.length;
+  }, [messages.length]);
 
   // Restore chat, language, and theme from localStorage on mount
   useEffect(() => {
@@ -152,9 +168,52 @@ export function ChatInterface() {
     const handleScroll = () => {
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       setShowScrollBtn(distanceFromBottom > 120);
+      const maxScrollable = el.scrollHeight - el.clientHeight;
+      if (maxScrollable <= 0) return;
+      const scrollPercent = Math.round((el.scrollTop / maxScrollable) * 100);
+      [25, 50, 75, 90].forEach((threshold) => {
+        if (scrollPercent >= threshold && !seenScrollDepthRef.current.has(threshold)) {
+          seenScrollDepthRef.current.add(threshold);
+          pushAnalyticsEvent("askpaiziev_scroll_depth", {
+            scroll_percent: threshold,
+            language: latestLangRef.current,
+            message_count: latestMessageCountRef.current,
+          });
+        }
+      });
     };
     el.addEventListener("scroll", handleScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Engagement checkpoints to segment how long users stay in a session.
+  useEffect(() => {
+    const checkpointsInSeconds = [30, 60, 180];
+    engagementTimersRef.current = checkpointsInSeconds.map((seconds) =>
+      setTimeout(() => {
+        pushAnalyticsEvent("askpaiziev_engaged_time", {
+          engaged_seconds: seconds,
+          language: latestLangRef.current,
+          message_count: latestMessageCountRef.current,
+        });
+      }, seconds * 1000)
+    );
+    return () => {
+      engagementTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      const secondsSpent = Math.round((Date.now() - sessionStartMsRef.current) / 1000);
+      pushAnalyticsEvent("askpaiziev_session_time", {
+        seconds_spent: secondsSpent,
+        language: latestLangRef.current,
+        message_count: latestMessageCountRef.current,
+      });
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
   }, []);
 
   // Auto-resize textarea
@@ -173,6 +232,9 @@ export function ChatInterface() {
   const submitMessage = (text: string) => {
     if (!text.trim() || isLoading) return;
     setLastFailedInput(text);
+    lastPromptSourceRef.current = "typed";
+    responseStartMsRef.current = performance.now();
+    responseTrackedRef.current = false;
     pushAnalyticsEvent("askpaiziev_prompt_submit", {
       language: lang,
       prompt_length: text.trim().length,
@@ -203,6 +265,9 @@ export function ChatInterface() {
       const retryText = lastFailedInput;
       // Remove the failed user message, then retry on next tick
       setMessages((prev) => prev.slice(0, -1));
+      lastPromptSourceRef.current = "retry";
+      responseStartMsRef.current = performance.now();
+      responseTrackedRef.current = false;
       pushAnalyticsEvent("askpaiziev_retry_click", {
         language: lang,
         prompt_length: retryText.trim().length,
@@ -222,7 +287,18 @@ export function ChatInterface() {
     return t.errorGeneric;
   };
 
+  const getErrorType = (err: Error) => {
+    const msg = (err.message || "").toLowerCase();
+    if (msg.includes("429") || msg.includes("rate")) return "rate_limit";
+    if (msg.includes("500") || msg.includes("503")) return "server";
+    if (msg.includes("network") || msg.includes("fetch")) return "network";
+    return "unknown";
+  };
+
   const handleSuggestedQuestion = (question: string) => {
+    lastPromptSourceRef.current = "suggested";
+    responseStartMsRef.current = performance.now();
+    responseTrackedRef.current = false;
     pushAnalyticsEvent("askpaiziev_prompt_submit", {
       language: lang,
       prompt_length: question.trim().length,
@@ -267,6 +343,44 @@ export function ChatInterface() {
       language: lang,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (responseTrackedRef.current || responseStartMsRef.current === null) return;
+    const hasFirstToken = status === "streaming" && lastAssistantText.trim().length > 0;
+    if (!hasFirstToken) return;
+    const responseTimeMs = Math.round(performance.now() - responseStartMsRef.current);
+    pushAnalyticsEvent("askpaiziev_response_time", {
+      response_time_ms: responseTimeMs,
+      source: lastPromptSourceRef.current,
+      language: latestLangRef.current,
+      message_count: latestMessageCountRef.current,
+    });
+    responseTrackedRef.current = true;
+    responseStartMsRef.current = null;
+  }, [status, lastAssistantText]);
+
+  useEffect(() => {
+    if (!error || responseStartMsRef.current === null) return;
+    const responseTimeMs = Math.round(performance.now() - responseStartMsRef.current);
+    pushAnalyticsEvent("askpaiziev_response_error", {
+      response_time_ms: responseTimeMs,
+      error_type: getErrorType(error),
+      source: lastPromptSourceRef.current,
+      language: latestLangRef.current,
+      message_count: latestMessageCountRef.current,
+    });
+    responseTrackedRef.current = true;
+    responseStartMsRef.current = null;
+  }, [error]);
+
+  const handleOutboundClick = useCallback((url: string, linkText: string) => {
+    pushAnalyticsEvent("askpaiziev_outbound_click", {
+      link_url: url,
+      link_text: linkText,
+      page_path: window.location.pathname,
+      language: latestLangRef.current,
+    });
   }, []);
 
   return (
@@ -557,6 +671,7 @@ export function ChatInterface() {
             href="https://akbar.one"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => handleOutboundClick("https://akbar.one", "Built by akbar.one")}
             className="text-[10px] sm:text-[11px] transition-opacity hover:opacity-80"
             style={{ color: "var(--muted)", opacity: 0.5 }}
           >
