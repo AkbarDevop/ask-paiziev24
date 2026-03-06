@@ -17,6 +17,17 @@ import { ThinkingIndicator } from "./ThinkingIndicator";
 import { FollowUpChips } from "./FollowUpChips";
 import { UI_TEXT, type Language } from "@/lib/prompts";
 
+type AnalyticsPayload = Record<string, string | number | boolean>;
+
+function pushAnalyticsEvent(event: string, payload: AnalyticsPayload = {}) {
+  if (typeof window === "undefined") return;
+  const windowWithDataLayer = window as typeof window & {
+    dataLayer?: Array<Record<string, unknown>>;
+  };
+  windowWithDataLayer.dataLayer = windowWithDataLayer.dataLayer || [];
+  windowWithDataLayer.dataLayer.push({ event, ...payload });
+}
+
 export function ChatInterface() {
   const [lang, setLang] = useState<Language>("en");
   const { messages, sendMessage, setMessages, status, error } = useChat();
@@ -30,6 +41,7 @@ export function ChatInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
+  const hadAssistantResponseRef = useRef(false);
 
   const t = UI_TEXT[lang];
   const isLoading = status === "streaming" || status === "submitted";
@@ -88,10 +100,27 @@ export function ChatInterface() {
     }
   }, [messages]);
 
+  // Track first meaningful response to measure successful chat engagement
+  useEffect(() => {
+    if (hadAssistantResponseRef.current) return;
+    const hasAssistantText = messages.some(
+      (message) =>
+        message.role === "assistant" &&
+        message.parts?.some((part) => part.type === "text" && part.text.trim().length > 0)
+    );
+    if (hasAssistantText) {
+      hadAssistantResponseRef.current = true;
+      pushAnalyticsEvent("askpaiziev_first_response", {
+        language: lang,
+      });
+    }
+  }, [messages, lang]);
+
   // Persist language preference
   useEffect(() => {
     if (!restoredRef.current) return;
     localStorage.setItem("ask-akmal-lang", lang);
+    pushAnalyticsEvent("askpaiziev_language_change", { language: lang });
   }, [lang]);
 
   // Show thinking indicator shortly after submission, hide once text appears
@@ -144,6 +173,11 @@ export function ChatInterface() {
   const submitMessage = (text: string) => {
     if (!text.trim() || isLoading) return;
     setLastFailedInput(text);
+    pushAnalyticsEvent("askpaiziev_prompt_submit", {
+      language: lang,
+      prompt_length: text.trim().length,
+      source: "typed",
+    });
     const prefix = lang === "uz" ? "[Respond in Uzbek / O'zbek tilida javob bering]\n" : "";
     sendMessage({ text: prefix + text });
     setInput("");
@@ -169,6 +203,10 @@ export function ChatInterface() {
       const retryText = lastFailedInput;
       // Remove the failed user message, then retry on next tick
       setMessages((prev) => prev.slice(0, -1));
+      pushAnalyticsEvent("askpaiziev_retry_click", {
+        language: lang,
+        prompt_length: retryText.trim().length,
+      });
       setTimeout(() => {
         sendMessage({ text: retryText });
       }, 100);
@@ -185,6 +223,11 @@ export function ChatInterface() {
   };
 
   const handleSuggestedQuestion = (question: string) => {
+    pushAnalyticsEvent("askpaiziev_prompt_submit", {
+      language: lang,
+      prompt_length: question.trim().length,
+      source: "suggested",
+    });
     const prefix = lang === "uz" ? "[Respond in Uzbek / O'zbek tilida javob bering]\n" : "";
     sendMessage({ text: prefix + question });
   };
@@ -194,6 +237,7 @@ export function ChatInterface() {
     setTheme(next);
     document.documentElement.dataset.theme = next;
     localStorage.setItem("ask-akmal-theme", next);
+    pushAnalyticsEvent("askpaiziev_theme_toggle", { theme: next });
   }, [theme]);
 
   const scrollToBottom = useCallback(() => {
@@ -204,6 +248,10 @@ export function ChatInterface() {
   }, []);
 
   const handleNewChat = () => {
+    pushAnalyticsEvent("askpaiziev_new_chat", {
+      language: lang,
+      message_count: messages.length,
+    });
     setMessages([]);
     localStorage.removeItem("ask-akmal-chat");
     setInput("");
@@ -211,6 +259,15 @@ export function ChatInterface() {
       textareaRef.current.style.height = "auto";
     }
   };
+
+  useEffect(() => {
+    pushAnalyticsEvent("askpaiziev_view", {
+      page_path: window.location.pathname,
+      page_title: document.title,
+      language: lang,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
