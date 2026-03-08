@@ -30,7 +30,7 @@ function pushAnalyticsEvent(event: string, payload: AnalyticsPayload = {}) {
 
 export function ChatInterface() {
   const [lang, setLang] = useState<Language>("en");
-  const { messages, sendMessage, regenerate, setMessages, status, error } = useChat();
+  const { messages, sendMessage, regenerate, setMessages, status, error, clearError } = useChat();
   const [input, setInput] = useState("");
   const [lastFailedInput, setLastFailedInput] = useState("");
   const [showThinking, setShowThinking] = useState(false);
@@ -88,6 +88,12 @@ export function ChatInterface() {
   useEffect(() => {
     latestMessageCountRef.current = messages.length;
   }, [messages.length]);
+
+  useEffect(() => {
+    if (error && lastMessage?.role === "assistant" && lastAssistantText.trim().length > 0) {
+      clearError();
+    }
+  }, [clearError, error, lastAssistantText, lastMessage?.role]);
 
   // Restore chat, language, and theme from localStorage on mount
   useEffect(() => {
@@ -250,6 +256,7 @@ export function ChatInterface() {
 
   const submitMessage = (text: string) => {
     if (!text.trim() || isLoading) return;
+    clearError();
     setLastFailedInput(text);
     lastPromptSourceRef.current = "typed";
     responseStartMsRef.current = performance.now();
@@ -281,6 +288,7 @@ export function ChatInterface() {
 
   const handleRetry = () => {
     if (lastFailedInput) {
+      clearError();
       const retryText = lastFailedInput;
       // Remove the failed user message, then retry on next tick
       setMessages((prev) => prev.slice(0, -1));
@@ -301,6 +309,7 @@ export function ChatInterface() {
     if (isLoading || messages.length === 0) return;
     const hasAssistantMessage = messages.some((message) => message.role === "assistant");
     if (!hasAssistantMessage) return;
+    clearError();
     lastPromptSourceRef.current = "change_response";
     responseStartMsRef.current = performance.now();
     responseTrackedRef.current = false;
@@ -329,6 +338,7 @@ export function ChatInterface() {
   };
 
   const handleSuggestedQuestion = (question: string) => {
+    clearError();
     lastPromptSourceRef.current = "suggested";
     responseStartMsRef.current = performance.now();
     responseTrackedRef.current = false;
@@ -357,6 +367,7 @@ export function ChatInterface() {
   }, []);
 
   const handleNewChat = () => {
+    clearError();
     pushAnalyticsEvent("askpaiziev_new_chat", {
       language: lang,
       message_count: messages.length,
