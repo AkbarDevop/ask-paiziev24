@@ -119,7 +119,7 @@ export function ChatInterface() {
   const sessionStartMsRef = useRef(Date.now());
   const responseStartMsRef = useRef<number | null>(null);
   const responseTrackedRef = useRef(false);
-  const lastPromptSourceRef = useRef<"typed" | "suggested" | "retry" | "change_response">("typed");
+  const lastPromptSourceRef = useRef<"typed" | "suggested" | "retry">("typed");
   const seenScrollDepthRef = useRef<Set<number>>(new Set());
   const engagementTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const latestLangRef = useRef<Language>(lang);
@@ -562,26 +562,6 @@ export function ChatInterface() {
     submitMessage(lastFailedInput);
   };
 
-  const handleChangeResponse = () => {
-    if (isLoading || messages.length === 0) return;
-    const hasAssistantMessage = messages.some((message) => message.role === "assistant");
-    if (!hasAssistantMessage) return;
-    clearError();
-    lastPromptSourceRef.current = "change_response";
-    responseStartMsRef.current = performance.now();
-    responseTrackedRef.current = false;
-    pushAnalyticsEvent("askpaiziev_change_response_click", {
-      language: lang,
-      message_count: messages.length,
-    });
-    const conversation =
-      messages[messages.length - 1]?.role === "assistant"
-        ? messages.slice(0, -1)
-        : messages;
-    setMessages(conversation);
-    void streamAssistantResponse(conversation);
-  };
-
   const getErrorMessage = (err: Error) => {
     const msg = err.message || "";
     if (msg.includes("429") || msg.toLowerCase().includes("rate"))
@@ -886,34 +866,12 @@ export function ChatInterface() {
 
           {/* Follow-up suggestion chips */}
           {showFollowUps && (
-            <>
-              <FollowUpChips
-                onSelect={handleSuggestedQuestion}
-                lang={lang}
-                question={lastUserQuestion}
-                answer={lastAssistantText}
-              />
-              <div className="flex justify-end pt-1">
-                <button
-                  onClick={handleChangeResponse}
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-                  style={{
-                    color: "var(--muted)",
-                    border: "1px solid var(--border)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--suggestion-hover)";
-                    e.currentTarget.style.color = "var(--foreground)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "var(--muted)";
-                  }}
-                >
-                  {lang === "uz" ? "Javobni o'zgartirish" : "Change response"}
-                </button>
-              </div>
-            </>
+            <FollowUpChips
+              onSelect={handleSuggestedQuestion}
+              lang={lang}
+              question={lastUserQuestion}
+              answer={lastAssistantText}
+            />
           )}
 
           <div ref={messagesEndRef} />
