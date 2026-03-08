@@ -1,6 +1,6 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
+import type { UIMessage } from "@ai-sdk/react";
 import {
   useRef,
   useEffect,
@@ -18,6 +18,16 @@ import { FollowUpChips } from "./FollowUpChips";
 import { UI_TEXT, type Language } from "@/lib/prompts";
 
 type AnalyticsPayload = Record<string, string | number | boolean>;
+type ChatStatus = "ready" | "submitted" | "streaming";
+type ChatRequestMessage = { role: "user" | "assistant"; content: string };
+type TextPart = { type: "text"; text: string };
+type SourceUrlPart = {
+  type: "source-url";
+  sourceId: string;
+  sourceType?: string;
+  url?: string;
+  title?: string;
+};
 
 function pushAnalyticsEvent(event: string, payload: AnalyticsPayload = {}) {
   if (typeof window === "undefined") return;
@@ -28,14 +38,78 @@ function pushAnalyticsEvent(event: string, payload: AnalyticsPayload = {}) {
   windowWithDataLayer.dataLayer.push({ event, ...payload });
 }
 
+function getMessageText(message: UIMessage): string {
+  return (
+    message.parts
+      ?.filter(
+        (part): part is Extract<typeof part, { type: "text" }> =>
+          part.type === "text"
+      )
+      .map((part) => part.text)
+      .join("") || ""
+  );
+}
+
+function createMessage(role: "user" | "assistant", text = ""): UIMessage {
+  const parts = text ? ([{ type: "text", text }] as TextPart[]) : [];
+  return {
+    id: crypto.randomUUID(),
+    role,
+    parts,
+  } as UIMessage;
+}
+
+function toRequestMessages(messages: UIMessage[]): ChatRequestMessage[] {
+  return messages.map((message) => ({
+    role: message.role === "assistant" ? "assistant" : "user",
+    content: getMessageText(message),
+  }));
+}
+
+function normalizeStoredMessages(raw: unknown): UIMessage[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((message) => {
+      if (!message || typeof message !== "object") return null;
+
+      const candidate = message as {
+        id?: unknown;
+        role?: unknown;
+        content?: unknown;
+        parts?: unknown;
+      };
+
+      const role = candidate.role === "assistant" ? "assistant" : "user";
+      const parts = Array.isArray(candidate.parts)
+        ? candidate.parts
+            .filter((part): part is TextPart | SourceUrlPart =>
+              Boolean(part) && typeof part === "object" && "type" in part
+            )
+        : typeof candidate.content === "string" && candidate.content.trim()
+          ? ([{ type: "text", text: candidate.content }] as TextPart[])
+          : [];
+
+      return {
+        id: typeof candidate.id === "string" ? candidate.id : crypto.randomUUID(),
+        role,
+        parts,
+      } as UIMessage;
+    })
+    .filter((message): message is UIMessage => message !== null);
+}
+
 export function ChatInterface() {
   const [lang, setLang] = useState<Language>("en");
-  const { messages, sendMessage, regenerate, setMessages, status, error, clearError } = useChat();
+  const [messages, setMessages] = useState<UIMessage[]>([]);
+  const [status, setStatus] = useState<ChatStatus>("ready");
+  const [error, setError] = useState<Error>();
   const [input, setInput] = useState("");
   const [lastFailedInput, setLastFailedInput] = useState("");
   const [showThinking, setShowThinking] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const thinkingTimer = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -57,6 +131,7 @@ export function ChatInterface() {
   const lastMessage = messages[messages.length - 1];
   const showFollowUps =
     !isLoading && messages.length > 0 && lastMessage?.role === "assistant";
+  const clearError = useCallback(() => setError(undefined), []);
 
   // Check if streaming has started but no assistant text yet
   const lastAssistantText =
@@ -101,8 +176,9 @@ export function ChatInterface() {
       const savedChat = localStorage.getItem("ask-akmal-chat");
       if (savedChat) {
         const parsed = JSON.parse(savedChat);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
+        const normalized = normalizeStoredMessages(parsed);
+        if (normalized.length > 0) {
+          setMessages(normalized);
         }
       }
       const savedLang = localStorage.getItem("ask-akmal-lang");
@@ -122,6 +198,178 @@ export function ChatInterface() {
     restoredRef.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const streamAssistantResponse = useCallback(
+    async (conversation: UIMessage[]) => {
+      abortControllerRef.current?.abort();
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      clearError();
+      setStatus("submitted");
+
+      const assistantMessage = createMessage("assistant");
+      const assistantId = assistantMessage.id;
+      let sourceParts: SourceUrlPart[] = [];
+      let textParts: Array<{ id: string; text: string }> = [];
+      const seenSources = new Set<string>();
+
+      const syncAssistantMessage = () => {
+        const nextParts = [
+          ...sourceParts,
+          ...textParts.map((part) => ({ type: "text", text: part.text } as TextPart)),
+        ];
+
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantId
+              ? ({ ...message, parts: nextParts } as UIMessage)
+              : message
+          )
+        );
+      };
+
+      setMessages([...conversation, assistantMessage]);
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: toRequestMessages(conversation),
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok || !response.body) {
+          const body = await response.text().catch(() => "");
+          throw new Error(body || `Request failed with status ${response.status}`);
+        }
+
+        setStatus("streaming");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        const processEvent = (payload: string) => {
+          if (!payload || payload === "[DONE]") return;
+
+          const event = JSON.parse(payload) as
+            | { type: "source-url"; sourceId: string; sourceType?: string; url?: string; title?: string }
+            | { type: "text-start"; id: string }
+            | { type: "text-delta"; id: string; delta: string }
+            | { type: string };
+
+          switch (event.type) {
+            case "source-url": {
+              if (seenSources.has(event.sourceId)) return;
+              seenSources.add(event.sourceId);
+              sourceParts = [
+                ...sourceParts,
+                {
+                  type: "source-url",
+                  sourceId: event.sourceId,
+                  sourceType: event.sourceType,
+                  url: event.url,
+                  title: event.title,
+                },
+              ];
+              syncAssistantMessage();
+              return;
+            }
+            case "text-start": {
+              if (!textParts.some((part) => part.id === event.id)) {
+                textParts = [...textParts, { id: event.id, text: "" }];
+                syncAssistantMessage();
+              }
+              return;
+            }
+            case "text-delta": {
+              const existingIndex = textParts.findIndex((part) => part.id === event.id);
+              if (existingIndex === -1) {
+                textParts = [...textParts, { id: event.id, text: event.delta }];
+              } else {
+                const nextTextParts = [...textParts];
+                nextTextParts[existingIndex] = {
+                  ...nextTextParts[existingIndex],
+                  text: nextTextParts[existingIndex].text + event.delta,
+                };
+                textParts = nextTextParts;
+              }
+              syncAssistantMessage();
+              return;
+            }
+            default:
+              return;
+          }
+        };
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split("\n\n");
+          buffer = chunks.pop() ?? "";
+
+          for (const chunk of chunks) {
+            const lines = chunk
+              .split(/\r?\n/)
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).trim());
+
+            for (const line of lines) {
+              processEvent(line);
+            }
+          }
+        }
+
+        const trailing = decoder.decode();
+        if (trailing) {
+          buffer += trailing;
+        }
+
+        if (buffer.trim()) {
+          const lines = buffer
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim());
+
+          for (const line of lines) {
+            processEvent(line);
+          }
+        }
+
+        setStatus("ready");
+      } catch (streamError) {
+        if (controller.signal.aborted) {
+          setStatus("ready");
+          return;
+        }
+
+        setStatus("ready");
+        setError(
+          streamError instanceof Error
+            ? streamError
+            : new Error("Something went wrong. Please try again.")
+        );
+        setMessages((current) =>
+          current.filter((message) => {
+            if (message.id !== assistantId) return true;
+            return (message.parts?.length ?? 0) > 0;
+          })
+        );
+      } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+      }
+    },
+    [clearError]
+  );
 
   // Persist messages to localStorage
   useEffect(() => {
@@ -267,7 +515,9 @@ export function ChatInterface() {
       source: "typed",
     });
     const prefix = lang === "uz" ? "[Respond in Uzbek / O'zbek tilida javob bering]\n" : "";
-    sendMessage({ text: prefix + text });
+    const nextMessages = [...messages, createMessage("user", prefix + text)];
+    setMessages(nextMessages);
+    void streamAssistantResponse(nextMessages);
     setInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -287,22 +537,29 @@ export function ChatInterface() {
   };
 
   const handleRetry = () => {
-    if (lastFailedInput) {
-      clearError();
-      const retryText = lastFailedInput;
-      // Remove the failed user message, then retry on next tick
-      setMessages((prev) => prev.slice(0, -1));
-      lastPromptSourceRef.current = "retry";
-      responseStartMsRef.current = performance.now();
-      responseTrackedRef.current = false;
-      pushAnalyticsEvent("askpaiziev_retry_click", {
-        language: lang,
-        prompt_length: retryText.trim().length,
-      });
-      setTimeout(() => {
-        sendMessage({ text: retryText });
-      }, 100);
+    if (!lastFailedInput) return;
+
+    clearError();
+    lastPromptSourceRef.current = "retry";
+    responseStartMsRef.current = performance.now();
+    responseTrackedRef.current = false;
+    pushAnalyticsEvent("askpaiziev_retry_click", {
+      language: lang,
+      prompt_length: lastFailedInput.trim().length,
+    });
+
+    const conversation =
+      messages[messages.length - 1]?.role === "assistant"
+        ? messages.slice(0, -1)
+        : messages;
+
+    if (conversation.length > 0) {
+      setMessages(conversation);
+      void streamAssistantResponse(conversation);
+      return;
     }
+
+    submitMessage(lastFailedInput);
   };
 
   const handleChangeResponse = () => {
@@ -317,7 +574,12 @@ export function ChatInterface() {
       language: lang,
       message_count: messages.length,
     });
-    regenerate();
+    const conversation =
+      messages[messages.length - 1]?.role === "assistant"
+        ? messages.slice(0, -1)
+        : messages;
+    setMessages(conversation);
+    void streamAssistantResponse(conversation);
   };
 
   const getErrorMessage = (err: Error) => {
@@ -348,7 +610,10 @@ export function ChatInterface() {
       source: "suggested",
     });
     const prefix = lang === "uz" ? "[Respond in Uzbek / O'zbek tilida javob bering]\n" : "";
-    sendMessage({ text: prefix + question });
+    const nextMessages = [...messages, createMessage("user", prefix + question)];
+    setLastFailedInput(question);
+    setMessages(nextMessages);
+    void streamAssistantResponse(nextMessages);
   };
 
   const toggleTheme = useCallback(() => {
@@ -367,12 +632,14 @@ export function ChatInterface() {
   }, []);
 
   const handleNewChat = () => {
+    abortControllerRef.current?.abort();
     clearError();
     pushAnalyticsEvent("askpaiziev_new_chat", {
       language: lang,
       message_count: messages.length,
     });
     setMessages([]);
+    setStatus("ready");
     localStorage.removeItem("ask-akmal-chat");
     setInput("");
     if (textareaRef.current) {
