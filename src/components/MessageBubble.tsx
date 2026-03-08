@@ -40,15 +40,32 @@ function getSourceTypeLabel(type: string): string {
 function getSourceActionLabel(type: string): string {
   switch (type) {
     case "telegram_post":
-      return "Open post";
+      return "Open";
     case "telegram":
-      return "Open channel";
+      return "Open";
     case "youtube":
     case "youtube_transcript":
-      return "Open video";
+      return "Open";
     default:
-      return "Open source";
+      return "Open";
   }
+}
+
+function shouldSuppressSources(answer: string): boolean {
+  const normalized = answer.trim().toLowerCase();
+
+  return [
+    /i haven't spoken publicly about/u,
+    /i have not spoken publicly about/u,
+    /that's not something i've shared/u,
+    /that is not something i've shared/u,
+    /i don't have any information on that/u,
+    /i do not have any information on that/u,
+    /bu haqda ochiq gapirmaganman/u,
+    /bu mavzu bo'yicha ochiq fikr bildirganim yo'q/u,
+    /bu haqda menda ma'lumot yo'q/u,
+    /buni omma bilan ulashmaganman/u,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 interface MessageBubbleProps {
@@ -59,7 +76,7 @@ interface MessageBubbleProps {
 
 // SVG logo icons for source types
 function SourceIcon({ type }: { type: string }) {
-  const cls = "h-4 w-4 shrink-0";
+  const cls = "h-3.5 w-3.5 shrink-0";
   switch (type) {
     case "youtube":
       return (
@@ -156,9 +173,12 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
     }
   }
 
-  const displaySources = sources.some((source) => source.type === "telegram_post")
-    ? sources.filter((source) => source.type !== "telegram")
-    : sources;
+  const suppressSources = !isUser && shouldSuppressSources(text);
+  const displaySources = suppressSources
+    ? []
+    : sources.some((source) => source.type === "telegram_post")
+      ? sources.filter((source) => source.type !== "telegram")
+      : sources;
 
   const timestamp = timeAgo(new Date(createdAt));
 
@@ -299,10 +319,10 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
 
           {/* Expandable sources toggle */}
           {displaySources.length > 0 && !isStreaming && (
-            <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
+            <div className="mt-2 border-t pt-1.5" style={{ borderColor: "var(--border)" }}>
               <button
                 onClick={() => setSourcesOpen((o) => !o)}
-                className="flex w-full items-center gap-1.5 py-1 text-xs transition-opacity hover:opacity-80 sm:py-0 sm:text-[11px]"
+                className="flex w-full items-center gap-1.5 py-1 text-[11px] transition-opacity hover:opacity-80"
                 style={{ color: "var(--muted)" }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" style={{ opacity: 0.6 }}>
@@ -329,7 +349,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                 </svg>
               </button>
               {sourcesOpen && (
-                <div className="mt-2 flex flex-col gap-2 animate-fade-in">
+                <div className="mt-1.5 flex flex-col gap-1.5 animate-fade-in">
                   {displaySources.map((s) => {
                     const isLink = s.url.startsWith("http");
                     return isLink ? (
@@ -338,7 +358,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                         href={s.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-start gap-3 rounded-xl border px-3 py-2.5 text-xs transition-colors sm:text-[11px]"
+                        className="flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px] transition-colors"
                         style={{
                           color: "var(--muted)",
                           textDecoration: "none",
@@ -354,56 +374,56 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                         }}
                       >
                         <div
-                          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
                           style={{ background: "var(--suggestion-bg)" }}
                         >
                           <SourceIcon type={s.type} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div
-                            className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.12em]"
-                            style={{ opacity: 0.7 }}
-                          >
-                            {getSourceTypeLabel(s.type)}
-                          </div>
-                          <div
-                            className="truncate text-sm font-medium sm:text-[13px]"
+                            className="truncate text-[12px] font-medium"
                             style={{ color: "var(--foreground)" }}
                           >
                             {s.title}
                           </div>
+                          <div
+                            className="truncate text-[10px]"
+                            style={{ opacity: 0.72 }}
+                          >
+                            {getSourceTypeLabel(s.type)}
+                          </div>
                         </div>
-                        <div className="ml-auto flex shrink-0 items-center gap-1 text-[10px]" style={{ opacity: 0.7 }}>
+                        <div className="ml-auto flex shrink-0 items-center gap-1 text-[10px]" style={{ opacity: 0.66 }}>
                           <span>{getSourceActionLabel(s.type)}</span>
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-2.5 w-2.5">
-                            <path d="M6.22 8.72a.75.75 0 0 1 0-1.06l3.5-3.5a.75.75 0 1 1 1.06 1.06L7.81 8.25l2.97 2.97a.75.75 0 1 1-1.06 1.06l-3.5-3.5Z" />
+                            <path d="M5.25 3.5a.75.75 0 0 0 0 1.5h3.69L3.97 9.97a.75.75 0 1 0 1.06 1.06L10 6.06v3.69a.75.75 0 0 0 1.5 0v-5.5a.75.75 0 0 0-.75-.75h-5.5Z" />
                           </svg>
                         </div>
                       </a>
                     ) : (
                       <div
                         key={s.id}
-                        className="flex items-start gap-3 rounded-xl border px-3 py-2.5 text-[11px]"
+                        className="flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px]"
                         style={{ color: "var(--muted)", borderColor: "var(--border)" }}
                       >
                         <div
-                          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
                           style={{ background: "var(--suggestion-bg)" }}
                         >
                           <SourceIcon type={s.type} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div
-                            className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.12em]"
-                            style={{ opacity: 0.7 }}
-                          >
-                            {getSourceTypeLabel(s.type)}
-                          </div>
-                          <div
-                            className="truncate text-sm font-medium sm:text-[13px]"
+                            className="truncate text-[12px] font-medium"
                             style={{ color: "var(--foreground)" }}
                           >
                             {s.title}
+                          </div>
+                          <div
+                            className="truncate text-[10px]"
+                            style={{ opacity: 0.72 }}
+                          >
+                            {getSourceTypeLabel(s.type)}
                           </div>
                         </div>
                       </div>
