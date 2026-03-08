@@ -80,6 +80,7 @@ const stopWords = new Set([
   "at", "to", "for", "of", "with", "by", "from", "you", "your", "about",
   "can", "could", "would", "should", "tell", "me", "us", "it", "its",
   "that", "this", "have", "has", "had", "been", "be", "will", "shall",
+  "know", "known", "anything", "anyone", "someone", "named", "person", "people",
   "latest", "recent", "recently", "lately", "last", "month", "months", "week",
   "weeks", "year", "years", "today", "yesterday", "telegram", "channel",
   "post", "posts", "posted", "march", "april", "may", "june", "july", "august",
@@ -335,6 +336,53 @@ function scoreChunkAgainstKeywords(chunk: Chunk, keywords: string[]): number {
   }, 0);
 }
 
+function chunkMentionsKeyword(chunk: Chunk, keyword: string): boolean {
+  const haystack = [
+    chunk.content,
+    chunk.source_url,
+    readMetadataValue(chunk, "title") || "",
+  ]
+    .join("\n")
+    .toLowerCase();
+
+  return haystack.includes(keyword);
+}
+
+function shouldAttachSources(
+  chunks: Chunk[],
+  userMessage: string,
+  options: { dateScope: QueryDateScope | null; telegramFocused: boolean }
+): boolean {
+  if (chunks.length === 0) return false;
+
+  if (options.dateScope) return true;
+
+  if (
+    options.telegramFocused &&
+    chunks.some((chunk) => chunk.source_type === "telegram_post")
+  ) {
+    return true;
+  }
+
+  const keywords = extractKeywords(userMessage)
+    .filter((keyword) => keyword.length >= 4)
+    .slice(0, 6);
+
+  if (keywords.length === 0) return false;
+
+  const coveredKeywords = new Set<string>();
+
+  for (const keyword of keywords) {
+    if (chunks.some((chunk) => chunkMentionsKeyword(chunk, keyword))) {
+      coveredKeywords.add(keyword);
+    }
+  }
+
+  if (coveredKeywords.size === 0) return false;
+
+  return coveredKeywords.size >= 2 || coveredKeywords.size / keywords.length >= 0.34;
+}
+
 async function fetchSupplementalTelegramChunks(
   userMessage: string,
   scope: QueryDateScope | null
@@ -457,8 +505,19 @@ function selectContextChunks(
 function getSourceTitle(chunk: Chunk): string {
   if (chunk.source_type === "telegram_post") {
     const publishedAtMs = getChunkPublishedAtMs(chunk);
-    if (publishedAtMs) {
-      return `Telegram post · ${MONTH_DATE_FORMATTER.format(new Date(publishedAtMs))}`;
+    const postId = chunk.source_url.match(/\/(\d+)(?:[/?#]|$)/)?.[1];
+    const dateLabel = publishedAtMs
+      ? MONTH_DATE_FORMATTER.format(new Date(publishedAtMs))
+      : null;
+
+    if (dateLabel && postId) {
+      return `${dateLabel} · Post #${postId}`;
+    }
+    if (dateLabel) {
+      return dateLabel;
+    }
+    if (postId) {
+      return `Post #${postId}`;
     }
     return "Telegram post";
   }
@@ -636,7 +695,12 @@ export async function POST(req: Request) {
 
   // Collect unique sources for UI citations
   const uniqueSources: { id: string; type: string; url: string; title: string }[] = [];
-  if (selectedChunks.length) {
+  const attachSources = shouldAttachSources(selectedChunks, userMessage, {
+    dateScope: userDateScope,
+    telegramFocused: telegramFocusedQuestion,
+  });
+
+  if (attachSources && selectedChunks.length) {
     const seen = new Set<string>();
     const hasTelegramPost = selectedChunks.some((chunk) => chunk.source_type === "telegram_post");
     for (const c of selectedChunks) {
