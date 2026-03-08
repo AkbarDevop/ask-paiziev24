@@ -14,36 +14,36 @@
 
 ## What is this?
 
-An AI-powered conversational clone trained on Akmal Paiziev's public content — interviews, YouTube videos, LinkedIn posts, articles, his Telegram book *"From Tashkent to Silicon Valley"*, and podcast appearances across Uzbek, Russian, and English.
+An AI-powered conversational clone trained on Akmal Paiziev's public content — interviews, YouTube videos, LinkedIn posts, articles, his Telegram book *"From Tashkent to Silicon Valley"*, podcast appearances, and the public `@paiziev24` Telegram archive.
 
-Ask it anything about startups, building companies in emerging markets, hiring, fundraising, or the Central Asian tech ecosystem — and get answers grounded in Akmal's actual words and experiences, including his newer Telegram channel posts.
+Ask it anything about startups, building companies in emerging markets, hiring, fundraising, AI agents, logistics, or the Central Asian tech ecosystem — and get answers grounded in Akmal's actual words and recent posts.
 
 ## How it works
 
 ```
-User question → Embed query (Gemini 768D) → pgvector similarity search → Top-K context → Gemini 2.5 Flash → Streamed response with source citations
+User question → Gemini embedding → pgvector similarity search → date-aware / telegram-aware retrieval merge → Gemini 2.5 Flash → streamed response with exact source cards
 ```
 
-1. **Knowledge Base** — 966 text chunks from 97+ sources ingested into Supabase with vector embeddings (Gemini `gemini-embedding-001`, 768D) — 100% embedding coverage
-2. **Retrieval** — Hybrid search: vector similarity (cosine distance via HNSW index) + keyword ILIKE fallback, merged and deduplicated
-3. **Generation** — Gemini 2.5 Flash generates a response grounded in retrieved context, speaking as Akmal, with inline source citations
-4. **Streaming** — Response streams token-by-token with source badges, timestamps, and a blinking cursor
-5. **Security** — Rate limiting, input validation, Row Level Security, no client-exposed keys
+1. **Knowledge Base** — Public Akmal content embedded into Supabase with Gemini `gemini-embedding-001` vectors, including the full public `@paiziev24` Telegram archive snapshot
+2. **Retrieval** — Hybrid search: vector similarity + keyword fallback + supplemental Telegram retrieval for recent/date-specific questions
+3. **Generation** — Gemini 2.5 Flash answers in Akmal's voice, grounded only in retrieved public context
+4. **Streaming** — The client consumes the `/api/chat` SSE stream directly and renders source cards, timestamps, and token-by-token text
+5. **Safety & UX** — Rate limiting, input validation, unsupported-answer source suppression, and contextual follow-up questions
 
 ## Data Sources
 
 | Source | Count | Description |
 |--------|-------|-------------|
 | YouTube transcripts | 89 videos | Startup Maktabi series, podcasts (CACTUZ, AVLO, SEREDIN, Fikr yetakchilari, BUSOQQA, CHOYXONA), interviews on 25+ channels, panels & talks |
-| Telegram posts | Public channel sync | Recent `@paiziev24` channel posts captured from Telegram's public archive |
+| Telegram posts | 1,046 posts | Public `@paiziev24` channel archive captured and normalized from Telegram's public web archive |
 | Telegram book | 114 chapters | *"From Tashkent to Silicon Valley"* |
 | Articles | 7 | Euronews, Tribune, Kapital.uz, DigitalBusiness.kz, Numeo.ai, and more |
 | LinkedIn | 2 | Profile, posts, about section, Numeo description |
 | Interviews | 4 | The Tech, and others |
 | Bios | 2 | Startup Grind, Outsource |
 
-**Total:** 966 chunks across 97+ source files — all with 768D vector embeddings (100% coverage)
-**Languages:** Uzbek (580 chunks), Russian (196), English (175)
+**Corpus snapshot:** 89 YouTube transcripts, 1,046 Telegram posts, the Telegram book, and other public profile/interview/article data — all embedded into Supabase for retrieval.
+**Languages:** Uzbek, English, and Russian
 
 ## Tech Stack
 
@@ -60,25 +60,28 @@ User question → Embed query (Gemini 768D) → pgvector similarity search → T
 
 ## Features
 
-- **Semantic search** — Vector similarity via pgvector (768D Gemini embeddings, 100% coverage) with keyword fallback — understands meaning, not just keywords
-- **Source citations** — AI responses show which source types were used (YouTube, Interview, Article, etc.)
-- **Bilingual UI** — Full English / Uzbek toggle (all UI text, not just prompts)
-- **88 suggested questions per language** — Randomized from a pool of 176 total, every refresh is different
-- **Real-time streaming** — Token-by-token with blinking cursor, thinking indicator, and timestamps
-- **PWA installable** — Add to home screen on mobile for app-like experience
-- **Dark/light mode** — Follows system preference
-- **Markdown rendering** — Lists, bold, links, code blocks, blockquotes
-- **Copy & Share** — Action buttons on AI responses
+- **Hybrid semantic retrieval** — pgvector similarity search with keyword fallback and deduping
+- **Date-aware Telegram retrieval** — better answers for prompts like "last month", "March 2026", or "what did you post on Telegram?"
+- **Exact-post source cards** — source UI links directly to the relevant Telegram post or video instead of generic source labels
+- **Unsupported-answer cleanup** — irrelevant citations are suppressed when the answer is effectively "I haven't spoken publicly about that"
+- **Context-aware follow-ups** — follow-up chips now stay on-topic instead of using random generic prompts
+- **Bilingual UI** — full English / Uzbek toggle for UI and chat behavior
+- **101 suggested questions per language** — 202 total prompts, with a weighted mix of evergreen and recent Telegram-driven questions
+- **Direct SSE chat streaming** — token-by-token rendering, thinking indicator, timestamps, and production-safe client streaming
+- **PWA installable** — add to home screen on mobile for app-like experience
+- **Dark/light mode** — follows system preference
+- **Markdown rendering** — lists, bold, links, code blocks, blockquotes
+- **Copy & Share** — action buttons on AI responses
 - **Rate limiting** — 30 req/min per IP
-- **Input validation** — Max 2000 chars, max 50 messages per conversation
+- **Input validation** — max 2000 chars, max 50 messages per conversation
 - **Row Level Security** — SELECT-only, no client-exposed keys
-- **Mobile-first** — Responsive design with safe-area-inset support
+- **Mobile-first** — responsive design with safe-area-inset support
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - Supabase project with pgvector extension enabled
 - Google AI API key (Gemini — free tier works)
 
@@ -168,17 +171,17 @@ npx netlify deploy --prod
 ```
 src/
 ├── app/
-│   ├── api/chat/route.ts    # Chat API: vector search + keyword fallback + streaming with source citations
+│   ├── api/chat/route.ts    # Chat API: hybrid retrieval, telegram/date-aware ranking, source-card streaming
 │   ├── layout.tsx           # Root layout, OG metadata, PWA manifest, Plausible analytics
 │   └── page.tsx             # Home page
 ├── components/
-│   ├── ChatInterface.tsx    # Main chat UI, language toggle, input, message list
-│   ├── MessageBubble.tsx    # Message rendering, markdown, source badges, timestamps, streaming cursor
-│   ├── SuggestedQuestions.tsx # Random question picker from 88-question pool
+│   ├── ChatInterface.tsx    # Main chat UI, direct SSE client, language toggle, input, message list
+│   ├── MessageBubble.tsx    # Message rendering, markdown, compact source cards, timestamps, streaming cursor
+│   ├── SuggestedQuestions.tsx # Weighted recent + evergreen homepage question picker
 │   ├── AkmalAvatar.tsx      # Avatar with hero section (bilingual)
 │   └── ThinkingIndicator.tsx # Animated thinking steps (bilingual)
 ├── lib/
-│   ├── prompts.ts           # System prompt, 176 suggested questions (EN+UZ), UI translations
+│   ├── prompts.ts           # System prompt, 202 suggested questions (EN+UZ), UI translations, follow-up logic
 │   ├── embeddings.ts        # Gemini embedding helpers (768D, getEmbedding/getEmbeddings)
 │   └── supabase.ts          # DB client (service role, not exposed to client)
 scripts/
