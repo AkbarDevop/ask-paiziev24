@@ -17,6 +17,40 @@ function timeAgo(date: Date): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function getSourceTypeLabel(type: string): string {
+  switch (type) {
+    case "telegram_post":
+      return "Telegram Post";
+    case "telegram":
+      return "Telegram";
+    case "youtube":
+    case "youtube_transcript":
+      return "YouTube";
+    case "interview":
+      return "Interview";
+    case "article":
+      return "Article";
+    case "bio":
+      return "Profile";
+    default:
+      return type.replace(/_/g, " ");
+  }
+}
+
+function getSourceActionLabel(type: string): string {
+  switch (type) {
+    case "telegram_post":
+      return "Open post";
+    case "telegram":
+      return "Open channel";
+    case "youtube":
+    case "youtube_transcript":
+      return "Open video";
+    default:
+      return "Open source";
+  }
+}
+
 interface MessageBubbleProps {
   message: UIMessage;
   lang?: Language;
@@ -101,7 +135,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
     : rawText;
 
   // Extract sources from source-url parts
-  const sources: { type: string; url: string; title: string }[] = [];
+  const sources: { id: string; type: string; url: string; title: string }[] = [];
   if (!isUser && message.parts) {
     for (const part of message.parts) {
       if (part.type === "source-url") {
@@ -113,6 +147,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
           title?: string;
         };
         sources.push({
+          id: src.sourceId,
           type: src.sourceType || src.sourceId,
           url: typeof src.url === "string" ? src.url : "",
           title: src.title || src.sourceId,
@@ -120,6 +155,10 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
       }
     }
   }
+
+  const displaySources = sources.some((source) => source.type === "telegram_post")
+    ? sources.filter((source) => source.type !== "telegram")
+    : sources;
 
   const timestamp = timeAgo(new Date(createdAt));
 
@@ -259,7 +298,7 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
           )}
 
           {/* Expandable sources toggle */}
-          {sources.length > 0 && !isStreaming && (
+          {displaySources.length > 0 && !isStreaming && (
             <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border)" }}>
               <button
                 onClick={() => setSourcesOpen((o) => !o)}
@@ -269,7 +308,13 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" style={{ opacity: 0.6 }}>
                   <path fillRule="evenodd" d="M4.5 13a3.5 3.5 0 0 1-.41-6.97A4.5 4.5 0 0 1 8.5 2a4.5 4.5 0 0 1 4.41 4.03A3.5 3.5 0 0 1 11.5 13h-7Z" clipRule="evenodd" />
                 </svg>
-                {sources.length} {sources.length === 1 ? "source" : "sources"}
+                Sources
+                <span
+                  className="rounded-full px-1.5 py-0.5 text-[10px]"
+                  style={{ background: "var(--suggestion-bg)", color: "var(--foreground)" }}
+                >
+                  {displaySources.length}
+                </span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 16 16"
@@ -284,17 +329,21 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                 </svg>
               </button>
               {sourcesOpen && (
-                <div className="mt-1.5 flex flex-col gap-1 animate-fade-in">
-                  {sources.map((s) => {
+                <div className="mt-2 flex flex-col gap-2 animate-fade-in">
+                  {displaySources.map((s) => {
                     const isLink = s.url.startsWith("http");
                     return isLink ? (
                       <a
-                        key={s.type}
+                        key={s.id}
                         href={s.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs transition-colors sm:py-1.5 sm:text-[11px]"
-                        style={{ color: "var(--muted)", textDecoration: "none" }}
+                        className="flex items-start gap-3 rounded-xl border px-3 py-2.5 text-xs transition-colors sm:text-[11px]"
+                        style={{
+                          color: "var(--muted)",
+                          textDecoration: "none",
+                          borderColor: "var(--border)",
+                        }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.background = "var(--suggestion-hover)";
                           e.currentTarget.style.color = "var(--foreground)";
@@ -304,20 +353,59 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
                           e.currentTarget.style.color = "var(--muted)";
                         }}
                       >
-                        <SourceIcon type={s.type} />
-                        <span>{s.title}</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="ml-auto h-2.5 w-2.5" style={{ opacity: 0.4 }}>
-                          <path d="M6.22 8.72a.75.75 0 0 1 0-1.06l3.5-3.5a.75.75 0 1 1 1.06 1.06L7.81 8.25l2.97 2.97a.75.75 0 1 1-1.06 1.06l-3.5-3.5Z" />
-                        </svg>
+                        <div
+                          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                          style={{ background: "var(--suggestion-bg)" }}
+                        >
+                          <SourceIcon type={s.type} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.12em]"
+                            style={{ opacity: 0.7 }}
+                          >
+                            {getSourceTypeLabel(s.type)}
+                          </div>
+                          <div
+                            className="truncate text-sm font-medium sm:text-[13px]"
+                            style={{ color: "var(--foreground)" }}
+                          >
+                            {s.title}
+                          </div>
+                        </div>
+                        <div className="ml-auto flex shrink-0 items-center gap-1 text-[10px]" style={{ opacity: 0.7 }}>
+                          <span>{getSourceActionLabel(s.type)}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-2.5 w-2.5">
+                            <path d="M6.22 8.72a.75.75 0 0 1 0-1.06l3.5-3.5a.75.75 0 1 1 1.06 1.06L7.81 8.25l2.97 2.97a.75.75 0 1 1-1.06 1.06l-3.5-3.5Z" />
+                          </svg>
+                        </div>
                       </a>
                     ) : (
                       <div
-                        key={s.type}
-                        className="flex items-center gap-2 px-2 py-1.5 text-[11px]"
-                        style={{ color: "var(--muted)" }}
+                        key={s.id}
+                        className="flex items-start gap-3 rounded-xl border px-3 py-2.5 text-[11px]"
+                        style={{ color: "var(--muted)", borderColor: "var(--border)" }}
                       >
-                        <SourceIcon type={s.type} />
-                        <span>{s.title}</span>
+                        <div
+                          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                          style={{ background: "var(--suggestion-bg)" }}
+                        >
+                          <SourceIcon type={s.type} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.12em]"
+                            style={{ opacity: 0.7 }}
+                          >
+                            {getSourceTypeLabel(s.type)}
+                          </div>
+                          <div
+                            className="truncate text-sm font-medium sm:text-[13px]"
+                            style={{ color: "var(--foreground)" }}
+                          >
+                            {s.title}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

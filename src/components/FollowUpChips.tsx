@@ -1,19 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getRandomQuestions, type Language } from "@/lib/prompts";
+import { getContextualFollowUpQuestions, type Language } from "@/lib/prompts";
 
 interface FollowUpChipsProps {
   onSelect: (question: string) => void;
   lang: Language;
+  question: string;
+  answer: string;
 }
 
-export function FollowUpChips({ onSelect, lang }: FollowUpChipsProps) {
+export function FollowUpChips({ onSelect, lang, question, answer }: FollowUpChipsProps) {
   const [questions, setQuestions] = useState<string[]>([]);
 
   useEffect(() => {
-    setQuestions(getRandomQuestions(lang, 2));
-  }, [lang]);
+    setQuestions(getContextualFollowUpQuestions(lang, question, answer, 3));
+  }, [answer, lang, question]);
 
   if (questions.length === 0) return null;
 

@@ -68,6 +68,17 @@ export function ChatInterface() {
           .map((p) => p.text)
           .join("") || ""
       : "";
+  const lastUserQuestion =
+    [...messages]
+      .reverse()
+      .find((message) => message.role === "user")
+      ?.parts
+      ?.filter(
+        (part): part is Extract<typeof part, { type: "text" }> => part.type === "text"
+      )
+      .map((part) => part.text)
+      .join("")
+      .replace(/^\[Respond in Uzbek \/ O'zbek tilida javob bering\]\n/, "") || "";
   const isStreamingEmpty = status === "streaming" && lastAssistantText.length === 0;
 
   useEffect(() => {
@@ -598,7 +609,12 @@ export function ChatInterface() {
           {/* Follow-up suggestion chips */}
           {showFollowUps && (
             <>
-              <FollowUpChips onSelect={handleSuggestedQuestion} lang={lang} />
+              <FollowUpChips
+                onSelect={handleSuggestedQuestion}
+                lang={lang}
+                question={lastUserQuestion}
+                answer={lastAssistantText}
+              />
               <div className="flex justify-end pt-1">
                 <button
                   onClick={handleChangeResponse}

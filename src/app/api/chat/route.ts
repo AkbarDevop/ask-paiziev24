@@ -25,6 +25,11 @@ function isRateLimited(ip: string): boolean {
 // --- Input sanitization ---
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_MESSAGES = 50;
+const UZBEK_RESPONSE_PREFIX = /^\[Respond in Uzbek \/ O'zbek tilida javob bering\]\n/u;
+
+function stripLanguageDirective(text: string): string {
+  return text.replace(UZBEK_RESPONSE_PREFIX, "").trim();
+}
 
 function sanitizeInput(body: unknown): {
   ok: true;
@@ -75,7 +80,72 @@ const stopWords = new Set([
   "at", "to", "for", "of", "with", "by", "from", "you", "your", "about",
   "can", "could", "would", "should", "tell", "me", "us", "it", "its",
   "that", "this", "have", "has", "had", "been", "be", "will", "shall",
+  "latest", "recent", "recently", "lately", "last", "month", "months", "week",
+  "weeks", "year", "years", "today", "yesterday", "telegram", "channel",
+  "post", "posts", "posted", "march", "april", "may", "june", "july", "august",
+  "september", "october", "november", "december", "january", "february",
+  "mart", "yanvar", "fevral", "iyun", "iyul", "avgust", "sentyabr", "oktyabr",
+  "noyabr", "dekabr", "songgi", "so'nggi", "oxirgi", "oy", "kanal",
 ]);
+
+const TELEGRAM_QUERY_PATTERN = /\b(telegram|channel|post|posted|t\.me|kanal|postlar)\b/iu;
+const RECENT_QUERY_PATTERN = /\b(latest|recent|recently|lately|current|currently|these days|right now|past month|last month|last week|this month)\b/iu;
+const MONTH_LOOKUP: Record<string, number> = {
+  january: 0,
+  jan: 0,
+  yanvar: 0,
+  february: 1,
+  feb: 1,
+  fevral: 1,
+  march: 2,
+  mar: 2,
+  mart: 2,
+  april: 3,
+  apr: 3,
+  may: 4,
+  june: 5,
+  jun: 5,
+  iyun: 5,
+  july: 6,
+  jul: 6,
+  iyul: 6,
+  august: 7,
+  aug: 7,
+  avgust: 7,
+  september: 8,
+  sep: 8,
+  sentyabr: 8,
+  october: 9,
+  oct: 9,
+  oktyabr: 9,
+  november: 10,
+  nov: 10,
+  noyabr: 10,
+  december: 11,
+  dec: 11,
+  dekabr: 11,
+};
+
+const LONG_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+const MONTH_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+type QueryDateScope = {
+  start: Date;
+  end: Date;
+  label: string;
+  explicit: boolean;
+};
 
 function buildRetrievalQuery(
   messages: { role: "user" | "assistant"; content: string }[]
@@ -83,7 +153,7 @@ function buildRetrievalQuery(
   const recentUserMessages = messages
     .filter((message) => message.role === "user")
     .slice(-3)
-    .map((message) => message.content.trim())
+    .map((message) => stripLanguageDirective(message.content))
     .filter(Boolean);
 
   return recentUserMessages.join("\n");
@@ -98,14 +168,249 @@ function extractKeywords(text: string): string[] {
 }
 
 type Chunk = {
+  id?: number;
   content: string;
   source_type: string;
   source_url: string;
+  metadata?: Record<string, unknown> | null;
 };
 
-function selectContextChunks(chunks: Chunk[]): Chunk[] {
+function startOfUtcDay(year: number, month: number, day: number): Date {
+  return new Date(Date.UTC(year, month, day));
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function addUtcMonths(date: Date, months: number): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+}
+
+function parseQueryDateScope(query: string, now = new Date()): QueryDateScope | null {
+  const normalized = query.toLowerCase();
+  const today = startOfUtcDay(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+  const isoMatch = normalized.match(/\b(20\d{2})-(\d{2})(?:-(\d{2}))?\b/u);
+  if (isoMatch) {
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]) - 1;
+    const day = isoMatch[3] ? Number(isoMatch[3]) : null;
+
+    if (month >= 0 && month <= 11) {
+      if (day && day >= 1 && day <= 31) {
+        const start = startOfUtcDay(year, month, day);
+        return {
+          start,
+          end: addUtcDays(start, 1),
+          label: LONG_DATE_FORMATTER.format(start),
+          explicit: true,
+        };
+      }
+
+      const start = startOfUtcDay(year, month, 1);
+      return {
+        start,
+        end: addUtcMonths(start, 1),
+        label: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(start),
+        explicit: true,
+      };
+    }
+  }
+
+  const monthNames = Object.keys(MONTH_LOOKUP).join("|");
+  const monthDayYearMatch = normalized.match(
+    new RegExp(`\\b(${monthNames})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?\\s+(20\\d{2})\\b`, "iu")
+  );
+  if (monthDayYearMatch) {
+    const month = MONTH_LOOKUP[monthDayYearMatch[1]];
+    const day = Number(monthDayYearMatch[2]);
+    const year = Number(monthDayYearMatch[3]);
+    const start = startOfUtcDay(year, month, day);
+    return {
+      start,
+      end: addUtcDays(start, 1),
+      label: LONG_DATE_FORMATTER.format(start),
+      explicit: true,
+    };
+  }
+
+  const monthYearMatch = normalized.match(
+    new RegExp(`\\b(${monthNames})\\s+(20\\d{2})\\b`, "iu")
+  );
+  if (monthYearMatch) {
+    const month = MONTH_LOOKUP[monthYearMatch[1]];
+    const year = Number(monthYearMatch[2]);
+    const start = startOfUtcDay(year, month, 1);
+    return {
+      start,
+      end: addUtcMonths(start, 1),
+      label: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(start),
+      explicit: true,
+    };
+  }
+
+  if (/\b(last month|past month|last month or so)\b/iu.test(normalized) || /so'nggi oy|o'tgan oy|oxirgi oy/iu.test(normalized)) {
+    const start = addUtcDays(today, -30);
+    return {
+      start,
+      end: addUtcDays(today, 1),
+      label: `${MONTH_DATE_FORMATTER.format(start)} to ${MONTH_DATE_FORMATTER.format(today)}`,
+      explicit: false,
+    };
+  }
+
+  if (/\b(this month|current month)\b/iu.test(normalized) || /shu oy/iu.test(normalized)) {
+    const start = startOfUtcDay(today.getUTCFullYear(), today.getUTCMonth(), 1);
+    return {
+      start,
+      end: addUtcMonths(start, 1),
+      label: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(start),
+      explicit: false,
+    };
+  }
+
+  if (/\b(last week|past week)\b/iu.test(normalized) || /so'nggi hafta|o'tgan hafta/iu.test(normalized)) {
+    const start = addUtcDays(today, -7);
+    return {
+      start,
+      end: addUtcDays(today, 1),
+      label: `${MONTH_DATE_FORMATTER.format(start)} to ${MONTH_DATE_FORMATTER.format(today)}`,
+      explicit: false,
+    };
+  }
+
+  if (RECENT_QUERY_PATTERN.test(normalized)) {
+    const start = addUtcDays(today, -60);
+    return {
+      start,
+      end: addUtcDays(today, 1),
+      label: `${MONTH_DATE_FORMATTER.format(start)} to ${MONTH_DATE_FORMATTER.format(today)}`,
+      explicit: false,
+    };
+  }
+
+  return null;
+}
+
+function shouldPreferTelegram(userMessage: string): boolean {
+  return TELEGRAM_QUERY_PATTERN.test(userMessage) || RECENT_QUERY_PATTERN.test(userMessage);
+}
+
+function readMetadataValue(chunk: Chunk, key: string): string | null {
+  const value = chunk.metadata?.[key];
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number") return String(value);
+  return null;
+}
+
+function getChunkPublishedAt(chunk: Chunk): string | null {
+  const fromMetadata = readMetadataValue(chunk, "published_at");
+  if (fromMetadata) return fromMetadata;
+
+  const match = chunk.content.match(/^Date:\s*(.+)$/mu);
+  return match?.[1]?.trim() || null;
+}
+
+function getChunkPublishedAtMs(chunk: Chunk): number {
+  const value = getChunkPublishedAt(chunk);
+  if (!value) return 0;
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getChunkIndex(chunk: Chunk): number {
+  const value = Number(readMetadataValue(chunk, "chunk_index"));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function scoreChunkAgainstKeywords(chunk: Chunk, keywords: string[]): number {
+  if (keywords.length === 0) return 0;
+
+  const haystack = chunk.content.toLowerCase();
+  return keywords.reduce((score, keyword) => {
+    if (!haystack.includes(keyword)) return score;
+    return score + (keyword.length >= 6 ? 3 : 2);
+  }, 0);
+}
+
+async function fetchSupplementalTelegramChunks(
+  userMessage: string,
+  scope: QueryDateScope | null
+): Promise<Chunk[]> {
+  if (!shouldPreferTelegram(userMessage) && !scope) {
+    return [];
+  }
+
+  const limit = scope?.explicit ? 1400 : 450;
+  const { data } = await getSupabase()
+    .from("documents")
+    .select("id, content, source_type, source_url, metadata")
+    .eq("source_type", "telegram_post")
+    .order("id", { ascending: false })
+    .limit(limit);
+
+  const rows = (data as Chunk[] | null) ?? [];
+  if (rows.length === 0) return [];
+
+  const keywords = extractKeywords(userMessage);
+  const now = new Date();
+  const today = startOfUtcDay(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const effectiveScope = scope ?? {
+    start: addUtcDays(today, -60),
+    end: addUtcDays(today, 1),
+    label: `${MONTH_DATE_FORMATTER.format(addUtcDays(today, -60))} to ${MONTH_DATE_FORMATTER.format(today)}`,
+    explicit: false,
+  };
+  const filtered = rows.filter((chunk) => {
+    const publishedAtMs = getChunkPublishedAtMs(chunk);
+    if (!publishedAtMs) return false;
+    return publishedAtMs >= effectiveScope.start.getTime() && publishedAtMs < effectiveScope.end.getTime();
+  });
+
+  const bySource = new Map<string, { chunk: Chunk; score: number; publishedAtMs: number; chunkIndex: number }>();
+
+  for (const chunk of filtered) {
+    const sourceKey = chunk.source_url || String(chunk.id || "");
+    const candidate = {
+      chunk,
+      score: scoreChunkAgainstKeywords(chunk, keywords),
+      publishedAtMs: getChunkPublishedAtMs(chunk),
+      chunkIndex: getChunkIndex(chunk),
+    };
+    const existing = bySource.get(sourceKey);
+
+    if (
+      !existing ||
+      candidate.score > existing.score ||
+      (candidate.score === existing.score && candidate.publishedAtMs > existing.publishedAtMs) ||
+      (candidate.score === existing.score &&
+        candidate.publishedAtMs === existing.publishedAtMs &&
+        candidate.chunkIndex < existing.chunkIndex)
+    ) {
+      bySource.set(sourceKey, candidate);
+    }
+  }
+
+  return [...bySource.values()]
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      if (right.publishedAtMs !== left.publishedAtMs) return right.publishedAtMs - left.publishedAtMs;
+      return left.chunkIndex - right.chunkIndex;
+    })
+    .slice(0, scope?.explicit ? 8 : 6)
+    .map((entry) => entry.chunk);
+}
+
+function selectContextChunks(
+  chunks: Chunk[],
+  options: { telegramReserve?: number; maxTotal?: number } = {}
+): Chunk[] {
   const deduped: Chunk[] = [];
   const seen = new Set<string>();
+  const telegramReserve = options.telegramReserve ?? 2;
+  const maxTotal = options.maxTotal ?? 12;
 
   for (const chunk of chunks) {
     const dedupeKey = `${chunk.source_url}::${chunk.content}`;
@@ -137,25 +442,32 @@ function selectContextChunks(chunks: Chunk[]): Chunk[] {
   }
 
   for (const chunk of preferredTelegram) {
-    if (selected.length >= 2) break;
+    if (selected.length >= telegramReserve) break;
     tryAdd(chunk);
   }
 
   for (const chunk of deduped) {
-    if (selected.length >= 12) break;
+    if (selected.length >= maxTotal) break;
     tryAdd(chunk);
   }
 
   return selected;
 }
 
-function getSourceTitle(sourceType: string, url: string): string {
-  if (sourceType === "telegram_post") {
-    const postId = url.match(/\/(\d+)(?:\?|$)/)?.[1];
-    return postId ? `Telegram #${postId}` : "Telegram";
+function getSourceTitle(chunk: Chunk): string {
+  if (chunk.source_type === "telegram_post") {
+    const publishedAtMs = getChunkPublishedAtMs(chunk);
+    if (publishedAtMs) {
+      return `Telegram post · ${MONTH_DATE_FORMATTER.format(new Date(publishedAtMs))}`;
+    }
+    return "Telegram post";
   }
 
-  return SOURCE_LABELS[sourceType] || sourceType;
+  if (chunk.source_type === "telegram") {
+    return "Telegram archive";
+  }
+
+  return SOURCE_LABELS[chunk.source_type] || chunk.source_type;
 }
 
 // --- Source type labels ---
@@ -165,8 +477,8 @@ const SOURCE_LABELS: Record<string, string> = {
   interview: "Interview",
   article: "Article",
   bio: "Bio",
-  telegram: "Telegram",
-  telegram_post: "Telegram",
+  telegram: "Telegram archive",
+  telegram_post: "Telegram post",
   linkedin_post: "LinkedIn",
 };
 
@@ -204,8 +516,10 @@ export async function POST(req: Request) {
   }
 
   const { messages } = parsed;
-  const userMessage = messages[messages.length - 1]?.content || "";
+  const userMessage = stripLanguageDirective(messages[messages.length - 1]?.content || "");
   const retrievalQuery = buildRetrievalQuery(messages) || userMessage;
+  const userDateScope = parseQueryDateScope(userMessage);
+  const telegramFocusedQuestion = TELEGRAM_QUERY_PATTERN.test(userMessage);
 
   // --- Fetch context: vector search (primary) + keyword fallback ---
   let chunks: Chunk[] | null = null;
@@ -227,6 +541,18 @@ export async function POST(req: Request) {
     console.error("Vector search failed, falling back to keyword search:", err);
   }
 
+  const supplementalTelegramChunks = await fetchSupplementalTelegramChunks(userMessage, userDateScope);
+  if (supplementalTelegramChunks.length > 0) {
+    const merged = [...supplementalTelegramChunks, ...(chunks || [])];
+    const seen = new Set<string>();
+    chunks = merged.filter((chunk) => {
+      const key = `${chunk.source_url}::${chunk.content}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   // 2. Fallback: keyword ILIKE search
   if (!chunks || chunks.length < 3) {
     const keywords = extractKeywords(retrievalQuery);
@@ -238,7 +564,7 @@ export async function POST(req: Request) {
 
       const { data } = await getSupabase()
         .from("documents")
-        .select("content, source_type, source_url")
+        .select("content, source_type, source_url, metadata")
         .or(orFilter)
         .order("id")
         .limit(30);
@@ -255,7 +581,7 @@ export async function POST(req: Request) {
     if (!chunks || chunks.length < 3) {
       const { data: fallback } = await getSupabase()
         .from("documents")
-        .select("content, source_type, source_url")
+        .select("content, source_type, source_url, metadata")
         .in("source_type", ["bio", "interview", "article", "telegram_post"])
         .order("id")
         .limit(15);
@@ -263,7 +589,21 @@ export async function POST(req: Request) {
     }
   }
 
-  const selectedChunks = chunks?.length ? selectContextChunks(chunks) : [];
+  if (telegramFocusedQuestion && chunks?.some((chunk) => chunk.source_type === "telegram_post")) {
+    const telegramOnly = chunks.filter((chunk) =>
+      ["telegram_post", "telegram"].includes(chunk.source_type)
+    );
+
+    if (telegramOnly.length >= 2) {
+      chunks = telegramOnly;
+    }
+  }
+
+  const selectedChunks = chunks?.length
+    ? selectContextChunks(chunks, {
+        telegramReserve: userDateScope ? 6 : supplementalTelegramChunks.length > 0 ? 4 : 2,
+      })
+    : [];
 
   // --- Build context ---
   const context = selectedChunks.length
@@ -274,16 +614,36 @@ export async function POST(req: Request) {
         .join("\n\n---\n\n")
     : "No relevant context found.";
 
-  const systemPrompt = AKMAL_SYSTEM_PROMPT.replace(
-    "{retrieved_context}",
-    context
-  );
+  const todayLabel = LONG_DATE_FORMATTER.format(new Date());
+  const promptGuidance = [
+    `Today is ${todayLabel}.`,
+    telegramFocusedQuestion
+      ? "The user is specifically asking about Telegram content. Prefer telegram_post context and avoid mixing in YouTube or interviews when Telegram context is sufficient."
+      : "",
+    userDateScope
+      ? `The user is asking about Telegram content from ${userDateScope.label}. Do not answer with posts from outside that window.`
+      : "",
+    !userDateScope && supplementalTelegramChunks.length > 0
+      ? "The user is asking about recent or latest thinking. Prioritize the freshest dated Telegram posts in the context."
+      : "",
+  ].filter(Boolean);
+
+  const systemPrompt = [
+    AKMAL_SYSTEM_PROMPT.replace("{retrieved_context}", context),
+    "TEMPORAL GUIDANCE:",
+    ...promptGuidance.map((line) => `- ${line}`),
+  ].join("\n");
 
   // Collect unique sources for UI citations
   const uniqueSources: { id: string; type: string; url: string; title: string }[] = [];
   if (selectedChunks.length) {
     const seen = new Set<string>();
+    const hasTelegramPost = selectedChunks.some((chunk) => chunk.source_type === "telegram_post");
     for (const c of selectedChunks) {
+      if (hasTelegramPost && c.source_type === "telegram") {
+        continue;
+      }
+
       const sourceKey = c.source_url || c.source_type;
       if (!seen.has(sourceKey)) {
         seen.add(sourceKey);
@@ -295,7 +655,7 @@ export async function POST(req: Request) {
           id: `${c.source_type}:${sourceKey}`,
           type: c.source_type,
           url,
-          title: getSourceTitle(c.source_type, url),
+          title: getSourceTitle(c),
         });
       }
 

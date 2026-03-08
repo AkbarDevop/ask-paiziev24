@@ -20,6 +20,7 @@ RULES:
 8. You have deep knowledge about: startup building, finding investors, team hiring, sales, customer development, MVP, business models, leadership — from your Startup Maktabi YouTube series.
 9. Do NOT include source links or citation numbers in your response. Just speak naturally. Sources are displayed separately by the UI.
 10. If the user asks about Akmal's latest thinking, prioritize the freshest Telegram channel posts or LinkedIn content in the context.
+11. If the user asks about Telegram posts, recent activity, or a specific month/date, stay anchored to the dated context provided. Do not invent newer or older posts that are not in the context.
 
 CONTEXT FROM YOUR WRITINGS AND INTERVIEWS:
 {retrieved_context}`;
@@ -313,4 +314,178 @@ export function getRandomQuestions(lang: Language, count = 4): string[] {
     picked.push(pool.splice(idx, 1)[0]);
   }
   return picked;
+}
+
+const FOLLOW_UP_STOP_WORDS = new Set([
+  "what",
+  "how",
+  "why",
+  "when",
+  "where",
+  "who",
+  "did",
+  "does",
+  "is",
+  "are",
+  "was",
+  "were",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "but",
+  "for",
+  "with",
+  "from",
+  "into",
+  "about",
+  "that",
+  "this",
+  "your",
+  "his",
+  "her",
+  "their",
+  "them",
+  "you",
+  "they",
+  "have",
+  "has",
+  "had",
+  "been",
+  "being",
+  "there",
+  "post",
+  "posted",
+  "posts",
+  "telegram",
+  "channel",
+  "recent",
+  "recently",
+  "latest",
+  "lately",
+  "month",
+  "year",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+  "january",
+  "february",
+  "mart",
+  "iyun",
+  "iyul",
+  "avgust",
+  "sentyabr",
+  "oktyabr",
+  "noyabr",
+  "dekabr",
+  "yanvar",
+  "fevral",
+  "what",
+  "talked",
+  "said",
+  "share",
+  "shared",
+  "tell",
+  "more",
+  "last",
+  "time",
+]);
+
+function extractTopic(question: string, answer: string): string | null {
+  const text = `${question} ${answer}`.toLowerCase();
+  const words = text.match(/[\p{L}\p{N}]{4,30}/gu) ?? [];
+  const keywords = [...new Set(words)].filter((word) => !FOLLOW_UP_STOP_WORDS.has(word));
+  if (keywords.length === 0) return null;
+  return keywords.slice(0, 3).join(" ");
+}
+
+function dedupeQuestions(questions: string[], count: number): string[] {
+  return [...new Set(questions.map((question) => question.trim()).filter(Boolean))].slice(0, count);
+}
+
+export function getContextualFollowUpQuestions(
+  lang: Language,
+  question: string,
+  answer: string,
+  count = 3
+): string[] {
+  const combined = `${question} ${answer}`.toLowerCase();
+  const topic = extractTopic(question, answer);
+  const followUps: string[] = [];
+
+  const isTelegram = /(telegram|channel|post|spammer|spam|bot|kanal|postlar)/u.test(combined);
+  const isAI = /\b(ai|agent|agents|llm|model|vibe|coding|automation|digital employee|sun'iy)\b/u.test(combined);
+  const isHiring = /\b(hire|hiring|candidate|recruit|vacancy|team lead|product manager|employee|yollash|vakansiya)\b/u.test(combined);
+  const isStartup = /\b(startup|founder|investor|fundrais|mvp|market|customer|sales|growth|product|startup)\b/u.test(combined);
+  const isLogistics = /\b(numeo|broker|logistics|dispatch|truck|circle logistics)\b/u.test(combined);
+
+  if (lang === "uz") {
+    if (isTelegram) {
+      followUps.push("O'sha paytda Telegramda yana nimalar yozgansiz?");
+      followUps.push("Bu postdagi asosiy fikr nima edi?");
+      followUps.push("Keyingi postlarda shu mavzuga yana qaytdingizmi?");
+    }
+    if (isAI) {
+      followUps.push("Bu fikr sizning AI agentlar haqidagi umumiy qarashingizga qanday ulanadi?");
+      followUps.push("Bunga o'xshash amaliy misolni yaqinda qayerda ko'rsatgansiz?");
+    }
+    if (isHiring) {
+      followUps.push("Bunday rol uchun odam yollaganda eng muhim 3 sifat qaysilar?");
+      followUps.push("Bu yerda founderlar eng ko'p qanday xato qiladi?");
+    }
+    if (isStartup) {
+      followUps.push("Founderlar buni amalda birinchi bo'lib qanday sinab ko'rishi kerak?");
+      followUps.push("Bu bo'yicha eng katta xatoni nimada ko'rasiz?");
+    }
+    if (isLogistics) {
+      followUps.push("Bu Numeo.ai dagi hozirgi ishingizga qanday ta'sir qilgan?");
+    }
+
+    if (topic) {
+      followUps.push(`${topic} bo'yicha aniqroq misol bera olasizmi?`);
+      followUps.push(`${topic} haqidagi fikringiz vaqt o'tishi bilan qanday o'zgargan?`);
+    } else {
+      followUps.push("Bunga yaqin yana bitta aniq misol bera olasizmi?");
+      followUps.push("Keyin bu mavzu bo'yicha fikringiz o'zgardimi?");
+    }
+  } else {
+    if (isTelegram) {
+      followUps.push("What else were you posting around that time on Telegram?");
+      followUps.push("What was the main point behind that Telegram post?");
+      followUps.push("Did you come back to that topic in later Telegram posts?");
+    }
+    if (isAI) {
+      followUps.push("How does that connect to your broader view on AI agents?");
+      followUps.push("What's a concrete recent example of that from your work?");
+    }
+    if (isHiring) {
+      followUps.push("What are the top traits you look for when hiring for that?");
+      followUps.push("What hiring mistake do founders make most often here?");
+    }
+    if (isStartup) {
+      followUps.push("What's the first practical step a founder should take on this?");
+      followUps.push("What's the biggest mistake founders make on this topic?");
+    }
+    if (isLogistics) {
+      followUps.push("How does that show up in what you're building at Numeo now?");
+    }
+
+    if (topic) {
+      followUps.push(`Can you give a more specific example about ${topic}?`);
+      followUps.push(`How has your thinking on ${topic} changed over time?`);
+    } else {
+      followUps.push("Can you give one more specific example?");
+      followUps.push("Did your view on this change later?");
+    }
+  }
+
+  return dedupeQuestions(followUps, count);
 }
