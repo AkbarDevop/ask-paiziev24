@@ -25,7 +25,7 @@ RULES:
 CONTEXT FROM YOUR WRITINGS AND INTERVIEWS:
 {retrieved_context}`;
 
-export const SUGGESTED_QUESTIONS = {
+const EVERGREEN_SUGGESTED_QUESTIONS = {
   en: [
     // Personal story & early life
     "How did you start your first business at age 20?",
@@ -252,6 +252,50 @@ export const SUGGESTED_QUESTIONS = {
   ],
 } as const;
 
+const RECENT_SUGGESTED_QUESTIONS = {
+  en: [
+    "What did you post on Telegram last month?",
+    "What were you talking about in March 2026?",
+    "Why is distribution more expensive than code now?",
+    "What did you mean by \"intelligence costs are going to zero\"?",
+    "Why do you believe in the Rent-A-Human model?",
+    "What stood out to you about the 5 levels of AI coding?",
+    "Why should engineers use AI heavily, not lightly?",
+    "What do you mean by going fully agentic?",
+    "Why are startups hiring vibe coders and growth hackers?",
+    "Why were you asking for a Telegram anti-spam bot?",
+    "What were you doing in Chicago with customers?",
+    "What did you learn from competing with a dispatcher?",
+    "What makes a startup defensible in the age of AI agents?",
+    "What are you looking for in a Senior QA Engineer?",
+    "Why do principles matter in AI?",
+    "Which recent Telegram post best reflects your thinking today?",
+  ],
+  uz: [
+    "O'tgan oy Telegramda nimalar yozgansiz?",
+    "2026 yil martda nimalar haqida gapirgansiz?",
+    "Nega hozir distribution koddan qimmatroq?",
+    "\"Intellekt narhi 0 ga ketmoqda\" deganda nimani nazarda tutgansiz?",
+    "Rent-A-Human modeliga nega ishonasiz?",
+    "AI coding'ning 5 ta levelida sizni nima qiziqtirdi?",
+    "Nega dasturchilar AI'dan heavy foydalanishi kerak?",
+    "\"To'liq agentic\" deganda nimani nazarda tutasiz?",
+    "Nega startup'lar vibe coder va growth hacker qidirmoqda?",
+    "Nega Telegram anti-spam bot so'ragansiz?",
+    "Chicagoda mijozlar bilan nima qilayotgandingiz?",
+    "Tajribali dispatcher bilan raqobatdan nima o'rgandingiz?",
+    "AI agentlar davrida moat nimada?",
+    "Senior QA Engineer'da nimani qidiryapsiz?",
+    "AI'da prinsiplar nega muhim?",
+    "Hozirgi fikringizni qaysi Telegram postingiz yaxshi ifodalaydi?",
+  ],
+} as const;
+
+export const SUGGESTED_QUESTIONS = {
+  en: [...RECENT_SUGGESTED_QUESTIONS.en, ...EVERGREEN_SUGGESTED_QUESTIONS.en],
+  uz: [...RECENT_SUGGESTED_QUESTIONS.uz, ...EVERGREEN_SUGGESTED_QUESTIONS.uz],
+} as const;
+
 export type Language = "en" | "uz";
 
 export const UI_TEXT = {
@@ -306,14 +350,51 @@ export const UI_TEXT = {
   },
 } as const;
 
-export function getRandomQuestions(lang: Language, count = 4): string[] {
-  const pool = [...SUGGESTED_QUESTIONS[lang]];
+function pickRandomQuestions(
+  pool: readonly string[],
+  count: number,
+  seen: Set<string>
+): string[] {
+  const available = pool.filter((question) => !seen.has(question));
   const picked: string[] = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picked.push(pool.splice(idx, 1)[0]);
+
+  for (let i = 0; i < count && available.length > 0; i++) {
+    const idx = Math.floor(Math.random() * available.length);
+    const [question] = available.splice(idx, 1);
+    seen.add(question);
+    picked.push(question);
   }
+
   return picked;
+}
+
+function shuffleQuestions(questions: string[]): string[] {
+  const next = [...questions];
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+export function getRandomQuestions(lang: Language, count = 4): string[] {
+  const seen = new Set<string>();
+  const recentQuota = Math.min(Math.ceil(count / 2), RECENT_SUGGESTED_QUESTIONS[lang].length);
+  const evergreenQuota = Math.min(
+    Math.max(count - recentQuota, 0),
+    EVERGREEN_SUGGESTED_QUESTIONS[lang].length
+  );
+
+  const picked = [
+    ...pickRandomQuestions(RECENT_SUGGESTED_QUESTIONS[lang], recentQuota, seen),
+    ...pickRandomQuestions(EVERGREEN_SUGGESTED_QUESTIONS[lang], evergreenQuota, seen),
+  ];
+
+  if (picked.length < count) {
+    picked.push(...pickRandomQuestions(SUGGESTED_QUESTIONS[lang], count - picked.length, seen));
+  }
+
+  return shuffleQuestions(picked);
 }
 
 const FOLLOW_UP_STOP_WORDS = new Set([
