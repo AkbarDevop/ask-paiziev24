@@ -1,0 +1,74 @@
+name: Sync Telegram
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_history:
+        description: "Fetch the full public Telegram archive instead of only recent pages"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "17 5 * * 0"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-telegram:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check biweekly window
+        id: cadence
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          iso_week="$(date -u +%V)"
+          if [ $((10#$iso_week % 2)) -eq 0 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.cadence.outputs.run == 'true'
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        if: steps.cadence.outputs.run == 'true'
+        run: npm ci
+
+      - name: Sync Telegram data into repo
+        if: steps.cadence.outputs.run == 'true'
+        run: |
+          if [ "${{ github.event.inputs.full_history }}" = "true" ]; then
+            npx tsx scripts/fetch-telegram-channel.ts --channel=paiziev24 --all
+          else
+            npx tsx scripts/fetch-telegram-channel.ts --channel=paiziev24 --max-pages=10
+          fi
+
+      - name: Import Telegram data into Supabase
+        if: steps.cadence.outputs.run == 'true'
+        env:
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/import-telegram-posts.ts --channel=paiziev24
+
+      - name: Commit updated Telegram snapshot
+        if: steps.cadence.outputs.run == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .gitignore data/telegram_posts README.md .github/workflows/sync-telegram.yml package.json netlify.toml .nvmrc
+          git diff --cached --quiet && exit 0
+          git commit -m "Sync Telegram channel data"
+          git push

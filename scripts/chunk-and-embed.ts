@@ -14,16 +14,25 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { embedMany } from "ai";
-import { google } from "@ai-sdk/google";
 import * as fs from "fs";
 import * as path from "path";
+import {
+  collectFilesRecursive,
+  detectLanguageHeuristic,
+  parseStructuredDocument,
+  chunkText,
+  loadLocalEnv,
+  parseCliArgs,
+  sleep,
+} from "./lib/ingestion-utils";
+import { getGeminiEmbeddings } from "./lib/gemini-embeddings";
 
-// --- Config ---
-const CHUNK_SIZE = 600; // target tokens per chunk (approx 4 chars/token)
-const CHUNK_OVERLAP = 100;
-const CHARS_PER_TOKEN = 4;
 const DATA_DIR = path.join(process.cwd(), "data");
+const BATCH_SIZE = 20;
+const MAX_RETRIES = 4;
+const RETRY_BASE_DELAY_MS = 1200;
+
+loadLocalEnv();
 
 // --- Supabase client (service role for inserts) ---
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -47,12 +56,12 @@ let embedBatch: ((texts: string[]) => Promise<number[][]>) | null = null;
 
 async function initEmbeddings() {
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    const model = google.embedding("gemini-embedding-001");
-    const providerOptions = { google: { outputDimensionality: 768 } };
-    embedBatch = async (texts: string[]) => {
-      const { embeddings } = await embedMany({ model, values: texts, providerOptions });
-      return embeddings;
-    };
+    embedBatch = async (texts: string[]) =>
+      getGeminiEmbeddings(texts, {
+        outputDimensionality: 768,
+        taskType: "RETRIEVAL_DOCUMENT",
+        title: "Akmal Paiziev knowledge base",
+      });
     console.log("Embeddings: ENABLED (Gemini gemini-embedding-001, 768D)\n");
   } else {
     console.log(
@@ -61,38 +70,23 @@ async function initEmbeddings() {
   }
 }
 
-// --- Chunking ---
-function chunkText(text: string): string[] {
-  const chunkChars = CHUNK_SIZE * CHARS_PER_TOKEN;
-  const overlapChars = CHUNK_OVERLAP * CHARS_PER_TOKEN;
-  const chunks: string[] = [];
+async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
 
-  let start = 0;
-  while (start < text.length) {
-    let end = start + chunkChars;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt === MAX_RETRIES) break;
 
-    // Try to break at a paragraph or sentence boundary
-    if (end < text.length) {
-      const slice = text.slice(start, end + 200);
-      const paragraphBreak = slice.lastIndexOf("\n\n");
-      const sentenceBreak = slice.lastIndexOf(". ");
-
-      if (paragraphBreak > chunkChars * 0.7) {
-        end = start + paragraphBreak + 2;
-      } else if (sentenceBreak > chunkChars * 0.7) {
-        end = start + sentenceBreak + 2;
-      }
+      const delayMs = RETRY_BASE_DELAY_MS * attempt;
+      console.warn(`${label} failed (attempt ${attempt}/${MAX_RETRIES}). Retrying in ${delayMs}ms...`);
+      await sleep(delayMs);
     }
-
-    const chunk = text.slice(start, end).trim();
-    if (chunk.length > 50) {
-      chunks.push(chunk);
-    }
-
-    start = end - overlapChars;
   }
 
-  return chunks;
+  throw lastError;
 }
 
 // --- Source type from filename ---
@@ -101,9 +95,14 @@ function parseFilename(filename: string): {
   sourceUrl: string | null;
   language: string;
 } {
-  // Handle youtube/ subdirectory files
-  if (filename.startsWith("youtube/") || filename.startsWith("youtube\\")) {
+  const normalized = filename.replace(/\\/g, "/");
+
+  if (normalized.startsWith("youtube/")) {
     return { sourceType: "youtube", sourceUrl: null, language: "uz" };
+  }
+
+  if (normalized.startsWith("telegram_posts/")) {
+    return { sourceType: "telegram_post", sourceUrl: null, language: "uz" };
   }
 
   const name = path.basename(filename, path.extname(filename));
@@ -129,8 +128,37 @@ function detectLanguage(content: string): string | null {
   return null;
 }
 
+function buildChunkContent(
+  sourceType: string,
+  chunk: string,
+  structuredMetadata: Record<string, string>
+): string {
+  if (sourceType !== "telegram_post") {
+    return chunk;
+  }
+
+  const lines = [
+    "Telegram channel post",
+    `Channel: ${structuredMetadata.Channel ?? "@paiziev24"}`,
+    `Post ID: ${structuredMetadata["Post ID"] ?? ""}`,
+    `Date: ${structuredMetadata.Date ?? ""}`,
+    `URL: ${structuredMetadata.URL ?? ""}`,
+    "",
+    chunk,
+  ];
+
+  return lines.filter(Boolean).join("\n");
+}
+
 // --- Main ---
 async function main() {
+  const args = parseCliArgs();
+  if (args.help === true || args.h === true) {
+    console.log("Usage: npx tsx scripts/chunk-and-embed.ts");
+    console.log("Reads all .txt/.md files under data/, generates embeddings, and rebuilds the documents table.");
+    return;
+  }
+
   await initEmbeddings();
 
   if (!fs.existsSync(DATA_DIR)) {
@@ -142,28 +170,14 @@ async function main() {
     return;
   }
 
-  // Collect files from data/ and data/youtube/
-  const topFiles = fs
-    .readdirSync(DATA_DIR)
-    .filter((f) => f.endsWith(".txt") || f.endsWith(".md"))
-    .map((f) => path.join(DATA_DIR, f));
-
-  const ytDir = path.join(DATA_DIR, "youtube");
-  const ytFiles = fs.existsSync(ytDir)
-    ? fs
-        .readdirSync(ytDir)
-        .filter((f) => f.endsWith(".txt"))
-        .map((f) => path.join(ytDir, f))
-    : [];
-
-  const allFiles = [...topFiles, ...ytFiles];
+  const allFiles = collectFilesRecursive(DATA_DIR);
 
   if (allFiles.length === 0) {
     console.log("No .txt or .md files found in data/ directory.");
     return;
   }
 
-  console.log(`Found ${allFiles.length} file(s) to process (${topFiles.length} top-level + ${ytFiles.length} youtube).\n`);
+  console.log(`Found ${allFiles.length} file(s) to process.\n`);
 
   // Clear existing data to avoid duplicates on re-ingestion
   console.log("Clearing existing documents...");
@@ -178,11 +192,18 @@ async function main() {
 
   for (const filePath of allFiles) {
     const file = path.relative(DATA_DIR, filePath);
-    const content = fs.readFileSync(filePath, "utf-8");
+    const rawContent = fs.readFileSync(filePath, "utf-8");
+    const structured = parseStructuredDocument(rawContent);
     const parsed = parseFilename(file);
     const sourceType = parsed.sourceType;
-    const language = detectLanguage(content) || parsed.language;
-    const sourceUrl = extractUrl(content);
+    const content = structured.body || rawContent;
+    const language =
+      detectLanguage(rawContent) ||
+      (sourceType === "telegram_post"
+        ? detectLanguageHeuristic(content)
+        : null) ||
+      parsed.language;
+    const sourceUrl = extractUrl(rawContent);
 
     console.log(
       `Processing: ${file} (type: ${sourceType}, lang: ${language})`
@@ -191,8 +212,6 @@ async function main() {
     const chunks = chunkText(content);
     console.log(`  → ${chunks.length} chunks`);
 
-    // Process in batches of 20
-    const BATCH_SIZE = 20;
     for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
       const batch = chunks.slice(i, i + BATCH_SIZE);
 
@@ -200,30 +219,43 @@ async function main() {
       let embeddings: number[][] | null = null;
       if (embedBatch) {
         try {
-          embeddings = await embedBatch(batch);
-        } catch {
-          console.log("  Embedding quota exceeded — inserting without embeddings");
-          embedBatch = null; // Disable for remaining batches
+          embeddings = await withRetry("Embedding batch", () => embedBatch!(batch));
+        } catch (error) {
+          const message = String(error).toLowerCase();
+          if (
+            message.includes("quota") ||
+            message.includes("rate") ||
+            message.includes("429")
+          ) {
+            console.log("  Embedding quota exceeded — inserting without embeddings");
+            embedBatch = null; // Disable for remaining batches
+          } else {
+            throw error;
+          }
         }
       }
 
       const rows = batch.map((chunk, j) => ({
-        content: chunk,
+        content: buildChunkContent(sourceType, chunk, structured.metadata),
         embedding: embeddings ? JSON.stringify(embeddings[j]) : null,
         source_type: sourceType,
         source_url: sourceUrl,
         language,
-        metadata: { file, chunk_index: i + j },
+        metadata: { file, chunk_index: i + j, ...structured.metadata },
       }));
 
-      const { error } = await supabase.from("documents").insert(rows);
-      if (error) {
-        console.error(`  Error inserting batch: ${error.message}`);
-      } else {
-        console.log(
-          `  Inserted batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`
-        );
-      }
+      await withRetry("Insert batch", async () => {
+        const { error } = await supabase.from("documents").insert(rows);
+        if (error) {
+          throw new Error(error.message);
+        }
+      });
+
+      console.log(
+        `  Inserted batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`
+      );
+
+      await sleep(150);
     }
 
     totalChunks += chunks.length;

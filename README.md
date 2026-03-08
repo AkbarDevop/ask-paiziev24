@@ -16,7 +16,7 @@
 
 An AI-powered conversational clone trained on Akmal Paiziev's public content — interviews, YouTube videos, LinkedIn posts, articles, his Telegram book *"From Tashkent to Silicon Valley"*, and podcast appearances across Uzbek, Russian, and English.
 
-Ask it anything about startups, building companies in emerging markets, hiring, fundraising, or the Central Asian tech ecosystem — and get answers grounded in Akmal's actual words and experiences.
+Ask it anything about startups, building companies in emerging markets, hiring, fundraising, or the Central Asian tech ecosystem — and get answers grounded in Akmal's actual words and experiences, including his newer Telegram channel posts.
 
 ## How it works
 
@@ -35,6 +35,7 @@ User question → Embed query (Gemini 768D) → pgvector similarity search → T
 | Source | Count | Description |
 |--------|-------|-------------|
 | YouTube transcripts | 89 videos | Startup Maktabi series, podcasts (CACTUZ, AVLO, SEREDIN, Fikr yetakchilari, BUSOQQA, CHOYXONA), interviews on 25+ channels, panels & talks |
+| Telegram posts | Public channel sync | Recent `@paiziev24` channel posts captured from Telegram's public archive |
 | Telegram book | 114 chapters | *"From Tashkent to Silicon Valley"* |
 | Articles | 7 | Euronews, Tribune, Kapital.uz, DigitalBusiness.kz, Numeo.ai, and more |
 | LinkedIn | 2 | Profile, posts, about section, Numeo description |
@@ -109,13 +110,38 @@ npx supabase db push
 
 ### Ingest data
 
-Place your `.txt` files in `data/` (articles, bios) and `data/youtube/` (transcripts), then run:
+Place your `.txt` or `.md` files anywhere under `data/` (articles, bios, Telegram posts) and `data/youtube/` (transcripts), then run:
 
 ```bash
 source <(grep -v '^#' .env.local | grep '=' | sed 's/^/export /') && npx tsx scripts/chunk-and-embed.ts
 ```
 
 This chunks all files, generates Gemini embeddings, and inserts into Supabase.
+
+To sync recent Telegram posts from the public `@paiziev24` archive and import them without rebuilding the entire corpus:
+
+```bash
+npx tsx scripts/fetch-telegram-channel.ts --channel=paiziev24 --max-pages=15 --max-posts=250
+npx tsx scripts/import-telegram-posts.ts --channel=paiziev24
+```
+
+To sync Telegram in one command:
+
+```bash
+npm run sync:telegram
+```
+
+To fetch the full public Telegram history and re-import it:
+
+```bash
+npm run sync:telegram:all
+```
+
+Automatic updates:
+
+- `.github/workflows/sync-telegram.yml` runs on a biweekly cadence (implemented as a weekly trigger with every-other-week gating) and can also be triggered manually.
+- It fetches recent `@paiziev24` posts, imports them into Supabase, and commits the refreshed local snapshot.
+- Required GitHub Actions secrets: `GOOGLE_GENERATIVE_AI_API_KEY`, `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 
 To backfill embeddings for existing rows with `embedding = NULL`:
 
@@ -158,9 +184,12 @@ src/
 scripts/
 ├── chunk-and-embed.ts       # Data ingestion: chunk → embed → insert (clears + re-inserts)
 ├── backfill-embeddings.ts   # Backfill NULL embeddings in batches of 20
+├── fetch-telegram-channel.ts # Scrape public Telegram archive into data/telegram_posts/
+├── import-telegram-posts.ts # Incrementally import telegram_post rows into Supabase
 └── download-remaining-yt.py # YouTube transcript downloader
 data/
 ├── *.txt                    # Articles, interviews, bios, LinkedIn, Telegram book
+├── telegram_posts/          # Normalized Telegram channel posts by channel/post id
 └── youtube/*.txt            # 89 YouTube transcripts
 supabase/
 ├── schema.sql               # Base schema with pgvector, HNSW index, match_documents() RPC

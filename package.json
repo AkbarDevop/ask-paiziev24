@@ -2,11 +2,16 @@
   "name": "ask-akmal",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync:telegram": "tsx scripts/sync-telegram.ts",
+    "sync:telegram:all": "tsx scripts/sync-telegram.ts --all"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.50",

@@ -34,6 +34,7 @@ function SourceIcon({ type }: { type: string }) {
         </svg>
       );
     case "telegram":
+    case "telegram_post":
       return (
         <svg viewBox="0 0 24 24" className={cls} style={{ color: "#26A5E4" }}>
           <path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0Zm5.53 8.15-1.83 8.63c-.14.61-.5.76-.99.47l-2.76-2.03-1.33 1.28c-.15.15-.27.27-.56.27l.2-2.81 5.1-4.61c.22-.2-.05-.31-.34-.12l-6.31 3.97-2.72-.85c-.59-.18-.6-.59.12-.88l10.63-4.1c.49-.18.93.12.77.88Z" />
@@ -104,9 +105,15 @@ export function MessageBubble({ message, lang = "en", isStreaming = false }: Mes
   if (!isUser && message.parts) {
     for (const part of message.parts) {
       if (part.type === "source-url") {
-        const src = part as { type: "source-url"; sourceId: string; url?: string; title?: string };
+        const src = part as {
+          type: "source-url";
+          sourceId: string;
+          sourceType?: string;
+          url?: string;
+          title?: string;
+        };
         sources.push({
-          type: src.sourceId,
+          type: src.sourceType || src.sourceId,
           url: typeof src.url === "string" ? src.url : "",
           title: src.title || src.sourceId,
         });

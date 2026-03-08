@@ -35,7 +35,9 @@ yarn-error.log*
 .env*.local
 
 # raw data files for ingestion
-/data/
+/data/*
+!/data/telegram_posts/
+!/data/telegram_posts/**
 
 # vercel
 .vercel

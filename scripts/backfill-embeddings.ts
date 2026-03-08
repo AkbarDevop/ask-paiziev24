@@ -7,8 +7,10 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { embedMany } from "ai";
-import { google } from "@ai-sdk/google";
+import { getGeminiEmbeddings } from "./lib/gemini-embeddings";
+import { loadLocalEnv } from "./lib/ingestion-utils";
+
+loadLocalEnv();
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -24,8 +26,6 @@ if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
-const model = google.embedding("gemini-embedding-001");
-const providerOptions = { google: { outputDimensionality: 768 } };
 const BATCH_SIZE = 20;
 
 async function main() {
@@ -55,7 +55,11 @@ async function main() {
     const texts = batch.map((r) => r.content);
 
     try {
-      const { embeddings } = await embedMany({ model, values: texts, providerOptions });
+      const embeddings = await getGeminiEmbeddings(texts, {
+        outputDimensionality: 768,
+        taskType: "RETRIEVAL_DOCUMENT",
+        title: "Akmal Paiziev knowledge base",
+      });
 
       // Update each row
       for (let j = 0; j < batch.length; j++) {

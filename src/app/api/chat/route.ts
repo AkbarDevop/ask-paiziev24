@@ -77,22 +77,97 @@ const stopWords = new Set([
   "that", "this", "have", "has", "had", "been", "be", "will", "shall",
 ]);
 
+function buildRetrievalQuery(
+  messages: { role: "user" | "assistant"; content: string }[]
+): string {
+  const recentUserMessages = messages
+    .filter((message) => message.role === "user")
+    .slice(-3)
+    .map((message) => message.content.trim())
+    .filter(Boolean);
+
+  return recentUserMessages.join("\n");
+}
+
 function extractKeywords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "") // strip everything except alphanumeric + space
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && w.length < 30 && !stopWords.has(w))
-    .slice(0, 10); // cap at 10 keywords
+  const words = text.toLowerCase().match(/[\p{L}\p{N}]{3,30}/gu) ?? [];
+
+  return [...new Set(words)]
+    .filter((word) => !stopWords.has(word))
+    .slice(0, 12);
+}
+
+type Chunk = {
+  content: string;
+  source_type: string;
+  source_url: string;
+};
+
+function selectContextChunks(chunks: Chunk[]): Chunk[] {
+  const deduped: Chunk[] = [];
+  const seen = new Set<string>();
+
+  for (const chunk of chunks) {
+    const dedupeKey = `${chunk.source_url}::${chunk.content}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    deduped.push(chunk);
+  }
+
+  const selected: Chunk[] = [];
+  const sourceCounts = new Map<string, number>();
+  const typeCounts = new Map<string, number>();
+  const preferredTelegram = deduped.filter((chunk) =>
+    ["telegram", "telegram_post"].includes(chunk.source_type)
+  );
+
+  function tryAdd(chunk: Chunk): boolean {
+    const sourceKey = chunk.source_url || chunk.source_type;
+    const perSource = sourceCounts.get(sourceKey) || 0;
+    const perType = typeCounts.get(chunk.source_type) || 0;
+
+    if (perSource >= 2 || perType >= 5) {
+      return false;
+    }
+
+    selected.push(chunk);
+    sourceCounts.set(sourceKey, perSource + 1);
+    typeCounts.set(chunk.source_type, perType + 1);
+    return true;
+  }
+
+  for (const chunk of preferredTelegram) {
+    if (selected.length >= 2) break;
+    tryAdd(chunk);
+  }
+
+  for (const chunk of deduped) {
+    if (selected.length >= 12) break;
+    tryAdd(chunk);
+  }
+
+  return selected;
+}
+
+function getSourceTitle(sourceType: string, url: string): string {
+  if (sourceType === "telegram_post") {
+    const postId = url.match(/\/(\d+)(?:\?|$)/)?.[1];
+    return postId ? `Telegram #${postId}` : "Telegram";
+  }
+
+  return SOURCE_LABELS[sourceType] || sourceType;
 }
 
 // --- Source type labels ---
 const SOURCE_LABELS: Record<string, string> = {
   youtube: "YouTube",
+  youtube_transcript: "YouTube",
   interview: "Interview",
   article: "Article",
   bio: "Bio",
   telegram: "Telegram",
+  telegram_post: "Telegram",
+  linkedin_post: "LinkedIn",
 };
 
 export async function POST(req: Request) {
@@ -130,19 +205,19 @@ export async function POST(req: Request) {
 
   const { messages } = parsed;
   const userMessage = messages[messages.length - 1]?.content || "";
+  const retrievalQuery = buildRetrievalQuery(messages) || userMessage;
 
   // --- Fetch context: vector search (primary) + keyword fallback ---
-  type Chunk = { content: string; source_type: string; source_url: string };
   let chunks: Chunk[] | null = null;
 
   // 1. Try vector similarity search via match_documents RPC
   try {
-    const queryEmbedding = await getEmbedding(userMessage);
+    const queryEmbedding = await getEmbedding(retrievalQuery);
 
     const { data, error } = await getSupabase().rpc("match_documents", {
       query_embedding: JSON.stringify(queryEmbedding),
       match_threshold: 0.3,
-      match_count: 10,
+      match_count: 24,
     });
 
     if (!error && data && data.length > 0) {
@@ -154,7 +229,7 @@ export async function POST(req: Request) {
 
   // 2. Fallback: keyword ILIKE search
   if (!chunks || chunks.length < 3) {
-    const keywords = extractKeywords(userMessage);
+    const keywords = extractKeywords(retrievalQuery);
 
     if (keywords.length > 0) {
       const orFilter = keywords
@@ -166,13 +241,13 @@ export async function POST(req: Request) {
         .select("content, source_type, source_url")
         .or(orFilter)
         .order("id")
-        .limit(20);
+        .limit(30);
 
       if (data && data.length > 0) {
         // Merge: vector results first, then keyword results (deduplicated)
         const existing = new Set((chunks || []).map((c) => c.content));
         const newChunks = (data as Chunk[]).filter((c) => !existing.has(c.content));
-        chunks = [...(chunks || []), ...newChunks].slice(0, 15);
+        chunks = [...(chunks || []), ...newChunks].slice(0, 24);
       }
     }
 
@@ -181,16 +256,18 @@ export async function POST(req: Request) {
       const { data: fallback } = await getSupabase()
         .from("documents")
         .select("content, source_type, source_url")
-        .in("source_type", ["bio", "interview", "article"])
+        .in("source_type", ["bio", "interview", "article", "telegram_post"])
         .order("id")
         .limit(15);
       chunks = [...(chunks || []), ...((fallback as Chunk[]) || [])];
     }
   }
 
+  const selectedChunks = chunks?.length ? selectContextChunks(chunks) : [];
+
   // --- Build context ---
-  const context = chunks?.length
-    ? chunks
+  const context = selectedChunks.length
+    ? selectedChunks
         .map(
           (c) => `[Source: ${c.source_type}]\n${c.content}`
         )
@@ -203,22 +280,26 @@ export async function POST(req: Request) {
   );
 
   // Collect unique sources for UI citations
-  const uniqueSources: { type: string; url: string; title: string }[] = [];
-  if (chunks?.length) {
+  const uniqueSources: { id: string; type: string; url: string; title: string }[] = [];
+  if (selectedChunks.length) {
     const seen = new Set<string>();
-    for (const c of chunks) {
-      if (!seen.has(c.source_type)) {
-        seen.add(c.source_type);
+    for (const c of selectedChunks) {
+      const sourceKey = c.source_url || c.source_type;
+      if (!seen.has(sourceKey)) {
+        seen.add(sourceKey);
         let url = c.source_url || "";
-        if (c.source_type === "telegram" && !url.startsWith("http")) {
+        if (["telegram", "telegram_post"].includes(c.source_type) && !url.startsWith("http")) {
           url = "https://t.me/paiziev24";
         }
         uniqueSources.push({
+          id: `${c.source_type}:${sourceKey}`,
           type: c.source_type,
           url,
-          title: SOURCE_LABELS[c.source_type] || c.source_type,
+          title: getSourceTitle(c.source_type, url),
         });
       }
+
+      if (uniqueSources.length >= 5) break;
     }
   }
 
@@ -229,7 +310,8 @@ export async function POST(req: Request) {
         for (const src of uniqueSources) {
           writer.write({
             type: "source-url",
-            sourceId: src.type,
+            sourceId: src.id,
+            sourceType: src.type,
             url: src.url || src.type,
             title: src.title,
           });
