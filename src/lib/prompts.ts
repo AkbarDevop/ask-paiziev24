@@ -399,6 +399,23 @@ const FOLLOW_UP_STOP_WORDS = new Set([
   "time",
 ]);
 
+function isUnsupportedPublicAnswer(answer: string): boolean {
+  const normalized = answer.trim().toLowerCase();
+
+  return [
+    /i haven't spoken publicly about/u,
+    /i have not spoken publicly about/u,
+    /that's not something i've shared/u,
+    /that is not something i've shared/u,
+    /i don't have any information on that/u,
+    /i do not have any information on that/u,
+    /bu haqda ochiq gapirmaganman/u,
+    /bu mavzu bo'yicha ochiq fikr bildirganim yo'q/u,
+    /bu haqda menda ma'lumot yo'q/u,
+    /buni omma bilan ulashmaganman/u,
+  ].some((pattern) => pattern.test(normalized));
+}
+
 function extractTopic(question: string, answer: string): string | null {
   const text = `${question} ${answer}`.toLowerCase();
   const words = text.match(/[\p{L}\p{N}]{4,30}/gu) ?? [];
@@ -417,6 +434,10 @@ export function getContextualFollowUpQuestions(
   answer: string,
   count = 3
 ): string[] {
+  if (isUnsupportedPublicAnswer(answer)) {
+    return [];
+  }
+
   const combined = `${question} ${answer}`.toLowerCase();
   const topic = extractTopic(question, answer);
   const followUps: string[] = [];
